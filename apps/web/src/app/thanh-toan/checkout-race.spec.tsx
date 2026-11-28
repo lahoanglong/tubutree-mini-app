@@ -157,8 +157,10 @@ describe('/thanh-toan — đua giữa kết quả đặt đơn và dữ liệu n
   it('hai lần bấm liền trong cùng một nhịp: cùng body nên cùng key, máy chủ gộp thành một đơn', async () => {
     m.placeOrder.mockReturnValue(new Promise(() => {}));
     const r = await mount();
-    click(placeButton(r));
-    click(placeButton(r));
+    // Cùng một nút bị chạm hai lần (nhãn đổi "Đang đặt hàng…" ngay sau cú đầu nên không tìm lại theo chữ).
+    const button = placeButton(r);
+    click(button);
+    click(button);
     await flush(4);
     const keys = new Set(m.placeOrder.mock.calls.map((c) => c[1]));
     expect(keys.size).toBe(1);

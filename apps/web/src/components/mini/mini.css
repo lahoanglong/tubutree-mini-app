@@ -143,17 +143,6 @@
   }
 }
 
-/* Dòng năm link chính sách dưới câu đồng ý (OrderConsent): mỗi dòng link cao 44px nên khi phải xuống dòng (cột tóm tắt 326px ở máy tính,
-   máy 360px) vùng chạm của link dòng trên không đè link dòng dưới. Lề dọc âm trả lại phần cao thêm: vừa một dòng thì khối vẫn cao đúng một
-   dòng chữ phụ. inline-block (không phải block) để lề âm không lọt qua đáy đoạn văn kéo nút Đặt hàng lên. */
-.tubu-consent-links {
-  display: inline-block;
-  width: 100%;
-  vertical-align: top;
-  line-height: 44px;
-  margin-block: calc((var(--type-caption-size) * var(--type-caption-lh) - 44px) / 2);
-}
-
 .tubu-scroll-fade[data-fade-end] {
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
   mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
@@ -2119,3 +2108,482 @@ body:has([data-back-bar]):has([data-page-bleed]) {
     animation: none;
   }
 }
+
+/* ── Tinh gọn trang sản phẩm, giỏ, thanh toán (tubu-w47-01): cùng số đo với apps/miniapp/src/css/declutter.css (tubu-css-parity.spec.ts so từng luật). ── */
+
+/* ── Dòng "Bạn đã mua ngày dd/mm · Mua lại" (PdpRebuyRow): một dòng nhỏ, nút chữ thay nút viền. ── */
+.tubu-rebuy {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
+  min-height: 44px;
+  padding: 0 var(--space-inset-page);
+  background: var(--color-bg-surface);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-rebuy-text {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+}
+.tubu-rebuy-cta {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-brand);
+  font: inherit;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  font-weight: var(--type-label-weight);
+  cursor: pointer;
+}
+.tubu-rebuy-cta[aria-disabled='true'] { opacity: 0.6; }
+
+/* ── Dải chọn cách mua (PdpBuyModes): một hàng nút chia đều, chế độ đang chọn viền đậm; dòng chi tiết chỉ của chế độ đang chọn. ── */
+.tubu-buy-modes {
+  box-sizing: border-box;
+  padding: 0 var(--space-inset-page) var(--space-inset-card);
+  background: var(--color-bg-surface);
+}
+.tubu-buy-modes-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--space-inline-sm);
+}
+.tubu-buy-mode {
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: var(--space-stack-xs) var(--space-inline-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.tubu-buy-mode[aria-pressed='true'] {
+  border-color: var(--color-border-selected);
+  box-shadow: inset 0 0 0 1px var(--color-border-selected);
+  color: var(--color-text-brand);
+}
+.tubu-buy-mode-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: var(--type-label-weight);
+}
+.tubu-buy-mode-tag {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-price-deal);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: var(--type-label-weight);
+}
+.tubu-buy-modes-detail { margin-top: var(--space-stack-sm); }
+.tubu-buy-modes-detail:empty { display: none; }
+.tubu-buy-modes-detail .tubu-refill-offer { margin: 0; padding: 0; }
+.tubu-buy-mode-action {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: var(--space-stack-xs) var(--space-inline-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  color: var(--color-text-brand);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: var(--type-label-weight);
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-buy-mode-action-text { flex: 1 1 auto; min-width: 0; }
+
+/* ── Điểm nổi bật (PdpHighlights): tối đa 3 dòng; chứng nhận là một dòng chip. ── */
+.tubu-highlights {
+  box-sizing: border-box;
+  margin-top: var(--space-stack-sm);
+  padding: var(--space-inset-card) var(--space-inset-page);
+  background: var(--color-bg-surface);
+}
+.tubu-highlights-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-highlights-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-inline-sm);
+  min-width: 0;
+}
+.tubu-highlights-icon {
+  flex: none;
+  margin-top: 3px;
+  color: var(--color-text-brand);
+}
+.tubu-highlights-body { min-width: 0; }
+.tubu-highlights-text {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  overflow-wrap: anywhere;
+}
+.tubu-highlights-source {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  overflow-wrap: anywhere;
+}
+.tubu-highlights-certs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-inline-xs) var(--space-inline-sm);
+  min-width: 0;
+}
+.tubu-highlights-cert {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-inline-xs);
+  padding: 2px var(--space-inline-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-brand);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  font-weight: var(--type-label-weight);
+}
+
+/* ── Chi tiết sản phẩm (PdpDetailRow): một dải trắng, các dòng gập sẵn ngăn bằng đường kẻ. ── */
+.tubu-pdp-details {
+  box-sizing: border-box;
+  margin-top: var(--space-stack-sm);
+  padding: 0 var(--space-inset-page);
+  background: var(--color-bg-surface);
+}
+.tubu-pdp-details-title {
+  display: flex;
+  align-items: center;
+  min-height: var(--section-header-h);
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--type-title-sm-size);
+  line-height: var(--type-title-sm-lh);
+  font-weight: 700;
+}
+.tubu-pdp-detail { border-top: 1px solid var(--color-border-subtle); }
+.tubu-pdp-detail-toggle {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-pdp-detail-title {
+  flex: 1 1 0%;
+  min-width: 0;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: var(--type-label-weight);
+}
+.tubu-pdp-detail-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+}
+.tubu-pdp-detail-chevron {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+.tubu-pdp-detail-toggle[aria-expanded='true'] .tubu-pdp-detail-chevron { transform: rotate(180deg); }
+.tubu-pdp-detail-body {
+  padding: 0 0 var(--space-inset-card);
+  color: var(--color-text-secondary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  overflow-wrap: anywhere;
+}
+.tubu-pdp-detail-body[hidden] { display: none; }
+
+/* ── Dải gợi ý mua thêm của Giỏ gập sẵn (FreeshipAddonRail `collapsible`): một dòng 44px mở/gập thẻ. ── */
+.tubu-addon-heading { margin: 0; font: inherit; }
+.tubu-addon-toggle {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: var(--type-label-weight);
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-addon-toggle-text { min-width: 0; font-variant-numeric: tabular-nums; }
+.tubu-addon-chevron { flex: none; color: var(--color-text-tertiary); }
+.tubu-addon-toggle[aria-expanded='true'] .tubu-addon-chevron { transform: rotate(180deg); }
+.tubu-addon-list[hidden] { display: none; }
+
+/* ── Chân dính giỏ (w47-01): khối tổng là nút mở/gập phần "chi tiết tính tiền" ngay trên hàng mã. ── */
+.tubu-cart-total {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+button.tubu-cart-total { cursor: pointer; }
+.tubu-cart-total-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-inline-xs);
+}
+.tubu-cart-total-label {
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+}
+.tubu-cart-total-value {
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-size: var(--type-title-sm-size);
+  line-height: var(--type-title-sm-lh);
+  font-weight: 700;
+}
+.tubu-cart-total-saving {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-xs);
+  color: var(--color-text-price-deal);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: var(--type-label-weight);
+}
+.tubu-cart-total-saving[data-plain='true'] { color: var(--color-text-brand); }
+.tubu-cart-total[aria-expanded='true'] .tubu-cart-total-chevron { transform: rotate(180deg); }
+.tubu-cart-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  padding: var(--space-stack-xs) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.tubu-cart-breakdown[hidden] { display: none; }
+
+/* ── Hàng Điểm Xanh một dòng ở thanh toán (PointsToggleRow): chữ, nút ⓘ 44px, công tắc. ── */
+.tubu-points-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-xs);
+  min-height: 44px;
+}
+.tubu-points-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: var(--type-label-weight);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.tubu-points-row-sub {
+  display: block;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  font-weight: 400;
+}
+.tubu-points-row-info {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+/* Công tắc DS (bản sao đúng luật `.tubu-switch` của tokens.css Mini App): web chưa có thành phần Switch riêng. */
+.tubu-switch {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 40px;
+  height: 24px;
+  margin: 0;
+  border-radius: 20px;
+  background: var(--color-border-strong);
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.tubu-switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-bg-surface);
+  transition: transform 0.15s ease;
+}
+.tubu-switch:checked {
+  background: var(--color-action-primary-bg);
+}
+.tubu-switch:checked::before {
+  transform: translateX(16px);
+}
+.tubu-switch:disabled {
+  background: var(--color-action-secondary-bg-disabled);
+}
+.tubu-switch:disabled::before {
+  background: var(--color-bg-canvas);
+}
+/* Vùng chạm 44px của công tắc web (Mini App dùng `Switch` của form.tsx có khung chạm riêng): nhãn bọc ô nên chạm cả khung vẫn bật/tắt. */
+.tubu-points-row-switch {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.tubu-points-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-secondary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+}
+
+/* ── Một dòng đồng ý điều khoản (OrderConsent): cả dòng là nút mở tấm năm chính sách. ── */
+.tubu-consent-line {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: var(--space-stack-sm) var(--space-inset-page) 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-consent-line-link {
+  color: var(--color-text-brand);
+  font-weight: var(--type-label-weight);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tubu-consent-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-consent-item {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tubu-consent-list li:last-child .tubu-consent-item { border-bottom: 0; }

@@ -1121,6 +1121,60 @@
       "screens": [
         "/product/:slug"
       ]
+    },
+    {
+      "name": "PdpBuyModes",
+      "miniapp": "apps/miniapp/src/components/product/pdp-buy-modes.tsx",
+      "web": "apps/web/src/components/mini/pdp-buy-modes.tsx",
+      "props": "PdpBuyModesProps",
+      "screens": [
+        "/product/:slug"
+      ]
+    },
+    {
+      "name": "PdpHighlights",
+      "miniapp": "apps/miniapp/src/components/product/pdp-highlights.tsx",
+      "web": "apps/web/src/components/mini/pdp-highlights.tsx",
+      "props": "PdpHighlightsProps",
+      "screens": [
+        "/product/:slug"
+      ]
+    },
+    {
+      "name": "PdpDetailRow",
+      "miniapp": "apps/miniapp/src/components/product/pdp-detail-row.tsx",
+      "web": "apps/web/src/components/mini/pdp-detail-row.tsx",
+      "props": "PdpDetailRowProps",
+      "screens": [
+        "/product/:slug"
+      ]
+    },
+    {
+      "name": "PointsToggleRow",
+      "miniapp": "apps/miniapp/src/components/checkout/points-toggle-row.tsx",
+      "web": "apps/web/src/components/mini/points-toggle-row.tsx",
+      "props": "PointsToggleRowProps",
+      "screens": [
+        "/checkout"
+      ]
+    },
+    {
+      "name": "OrderConsent",
+      "miniapp": "apps/miniapp/src/components/checkout/order-consent.tsx",
+      "web": "apps/web/src/components/order-consent.tsx",
+      "props": "OrderConsentProps",
+      "screens": [
+        "/checkout"
+      ],
+      "propsDiff": {
+        "miniOnly": [
+          "onOpenPolicy"
+        ],
+        "webOnly": [
+          "className"
+        ],
+        "reason": "web mở từng chính sách bằng liên kết thật /chinh-sach/[loai] (tấm năm link) và trang đặt chỗ câu đồng ý theo khổ (className); Mini không có trang chính sách riêng nên trao slug cho PolicySheet của trang thanh toán"
+      }
     }
   ],
   "webOnly": [

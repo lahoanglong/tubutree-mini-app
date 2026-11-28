@@ -996,20 +996,21 @@ describe('AddToCart — Mua ngay', () => {
   });
 
   describe('thanh CTA dính đáy (điện thoại)', () => {
-    it('hiện giá theo phân loại và số lượng đang chọn, kèm "Thêm vào giỏ" và "Mua ngay"', async () => {
+    it('tên đọc của "Mua ngay" mang giá theo phân loại và số lượng đang chọn, kèm "Thêm vào giỏ"', async () => {
       const { container } = mount();
       await flush();
-      expect(bar(container).textContent).toContain('150.000đ');
+      const buyName = () => bar(container).querySelector('[data-testid="buy-now"]')!.getAttribute('aria-label');
+      expect(buyName()).toBe('Mua ngay 150.000đ');
       click(container.querySelector('button[aria-label="Tăng số lượng"]'));
       click(container.querySelector('button[aria-label="Tăng số lượng"]'));
-      expect(bar(container).textContent).toContain('450.000đ'); // 150.000đ × 3
+      expect(buyName()).toBe('Mua ngay 450.000đ'); // 150.000đ × 3
       click(byText(container, 'button', '500ml'));
-      expect(bar(container).textContent).toContain('300.000đ'); // đổi phân loại thì số lượng về 1
+      expect(buyName()).toBe('Mua ngay 300.000đ'); // đổi phân loại thì số lượng về 1
       expect(byText(bar(container), 'button', 'Thêm vào giỏ')).not.toBeNull();
       expect(byText(bar(container), 'button', 'Mua ngay')).not.toBeNull();
     });
 
-    it('như Mini App: nút giỏ có huy hiệu số món, "Thêm vào giỏ" nền nhạt, "Mua ngay" hai dòng (nhãn + giá)', async () => {
+    it('như Mini App: nút giỏ có huy hiệu số món, "Thêm vào giỏ" nền nhạt, "Mua ngay" một dòng (giá chỉ ở tên đọc)', async () => {
       login();
       const { container } = mount();
       await flush();
@@ -1017,11 +1018,10 @@ describe('AddToCart — Mua ngay', () => {
       expect(cart.getAttribute('href')).toBe('/gio-hang');
       expect(cart.textContent).toBe('3');
       expect(byText(bar(container), 'button', 'Thêm vào giỏ')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
-      const buy = Array.from(bar(container).querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Mua ngay 150.000đ')!;
+      const buy = bar(container).querySelector<HTMLButtonElement>('[data-testid="buy-now"]')!;
+      expect(buy.textContent).toBe('Mua ngay');
       expect(buy.getAttribute('aria-label')).toBe('Mua ngay 150.000đ');
-      expect([...buy.querySelectorAll('span')].map((x) => x.textContent)).toEqual(['Mua ngay', '150.000đ']);
-      // Như Mini App: giá đổi theo phân loại và số lượng, số tabular giữ nhãn không xô ngang.
-      expect(buy.querySelectorAll('span')[1]!.className.split(/\s+/)).toContain('tabular-nums');
+      expect(buy.className.split(/\s+/)).not.toContain('flex-col');
       expect(bar(container).textContent).not.toContain('Tạm tính');
     });
 
@@ -1501,7 +1501,7 @@ describe('AddToCart — truy cập (A11Y-02, A11Y-03, A11Y-07)', () => {
     const buy = stickyBuy(container);
     const visible = buy.textContent!.replace(/\s+/g, ' ').trim();
     expect(visible.startsWith('Mua ngay')).toBe(true);
-    expect(buy.getAttribute('aria-label')).toBe(`Mua ngay ${buy.textContent!.replace('Mua ngay', '').trim()}`);
+    expect(buy.getAttribute('aria-label')).toMatch(new RegExp(`^${visible} [\\d.]+đ$`));
     expect(buy.getAttribute('aria-label')!.startsWith('Mua ngay')).toBe(true);
     expect(buy.getAttribute('aria-label')).not.toContain('·');
   });

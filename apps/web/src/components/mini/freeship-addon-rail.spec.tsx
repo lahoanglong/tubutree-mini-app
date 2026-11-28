@@ -125,3 +125,26 @@ describe('FreeshipAddonRail (web)', () => {
     });
   });
 });
+
+describe('FreeshipAddonRail (web) `collapsible`: dải gập sau một dòng (w47-01, như Mini App)', () => {
+  it('gập sẵn: tiêu đề h3 bọc nút "Gợi ý thêm để được Miễn phí giao hàng", thẻ ẩn; chạm mở/gập; vùng chạm 44px', () => {
+    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b')]} stage="freeship" collapsible onAdd={vi.fn()} />);
+    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="freeship-addons-toggle"]')!;
+    expect(toggle.parentElement!.tagName).toBe('H3');
+    expect(toggle.textContent).toBe('Gợi ý thêm để được Miễn phí giao hàng');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    const list = container.querySelector<HTMLElement>(`#${CSS.escape(toggle.getAttribute('aria-controls')!)}`)!;
+    expect(list.hidden).toBe(true);
+    click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(list.hidden).toBe(false);
+    click(toggle);
+    expect(list.hidden).toBe(true);
+    expect(smallTouchTargets(container)).toEqual([]);
+  });
+
+  it('mốc quà: dòng gập là tiêu đề có số còn thiếu', () => {
+    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b')]} stage="gift" title="Thêm 40.000đ nữa để nhận quà dùng thử 0đ" collapsible onAdd={vi.fn()} />);
+    expect(container.querySelector('[data-testid="freeship-addons-toggle"]')!.textContent).toBe('Thêm 40.000đ nữa để nhận quà dùng thử 0đ');
+  });
+});

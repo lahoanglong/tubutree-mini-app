@@ -31,11 +31,13 @@ describe('pdpRefillOffer (thẻ so túi/can Refill ở trang chi tiết chai, m�
       meta: 'Thay thế 20 chai nhựa · 890.000đ',
       addAria: 'Thêm Refill Nước rửa chén Fuwa3e 10L vào giỏ, 890.000đ',
       comparison: { savedVnd: 470_000, savedPct: 34, bottlesReplaced: 20 },
+      pack: 'túi',
     });
   });
 
   it('gói tên "Can": nói can, không nói túi', () => {
     expect(pdpRefillOffer(bottle, offer({ name: 'Can Refill Nước rửa chén Fuwa3e 10L' }))?.title).toBe('Chọn can Refill 10L tiết kiệm 470.000đ (~34%)');
+    expect(pdpRefillOffer(bottle, offer({ name: 'Can Refill Nước rửa chén Fuwa3e 10L' }))?.pack).toBe('can');
     expect(pdpRefillOffer(bottle, offer({ name: 'Refill nước rửa chén Candy 10L' }))?.title).toMatch(/^Chọn túi Refill/);
   });
 

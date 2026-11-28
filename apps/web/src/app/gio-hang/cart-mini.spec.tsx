@@ -239,7 +239,7 @@ describe('/gio-hang — khổ máy tính bảng và máy tính (W133)', () => {
     expect(card.className).not.toMatch(/overflow-y-auto|max-h-/);
   });
 
-  it('thanh dính ở md: nội dung cùng cột 2xl với lưới; các khoản giảm của thanh ẩn từ md (khung tóm tắt đã ghi), tổng và nút vẫn hiện', async () => {
+  it('thanh dính ở md: nội dung cùng cột 2xl với lưới; các khoản giảm của thanh nằm trong chi tiết gập (khung tóm tắt đã ghi), tổng và nút vẫn hiện', async () => {
     state.cart = cartOf([line({})], { discount: 50000, couponCode: 'XANH50' });
     const c = await mount();
     const inner = bar(c).firstElementChild as HTMLElement;
@@ -247,7 +247,8 @@ describe('/gio-hang — khổ máy tính bảng và máy tính (W133)', () => {
     expect(inner.className).toContain('md:max-w-2xl');
     expect(inner.className).not.toMatch(/(^|\s)max-w-/);
     const inBar = Array.from(bar(c).querySelectorAll('*')).find((e) => e.children.length === 0 && e.textContent === 'Giảm giá')!;
-    expect(inBar.closest('.md\\:hidden')).not.toBeNull();
+    expect(inBar.closest('[data-testid="cart-breakdown"]')).not.toBeNull();
+    expect(bar(c).querySelector<HTMLElement>('[data-testid="cart-breakdown"]')!.hidden).toBe(true);
     expect(bar(c).querySelector('[data-testid="cart-total-value"]')!.closest('.md\\:hidden')).toBeNull();
     expect(bar(c).querySelector('a[href="/thanh-toan"]')!.closest('.md\\:hidden')).toBeNull();
     const rows = c.querySelector('[data-testid="cart-summary-rows"]')!;
@@ -421,16 +422,29 @@ describe('/gio-hang — nút "Mua thêm" ở dòng sắp mở khoá mã (W50A)',
     await flush(6);
   };
 
-  it('còn thiếu để mở mã: dòng nhắc có nút "Mua thêm", bấm thì về trang chủ', async () => {
+  it('còn thiếu để mở mã: thanh mốc DUY NHẤT ở đầu giỏ có một nút "Mua thêm", bấm thì về trang chủ (w47-01: mã sắp mở khoá gộp vào thanh)', async () => {
     state.coupons = [GIAM45];
     state.previews = [SAP_MO];
     const c = await mount();
     await settle();
-    const cta = c.querySelector<HTMLElement>('[data-testid="cart-voucher-unlock-cta"]');
+    expect(c.querySelectorAll('[data-testid="freeship-progress"]')).toHaveLength(1);
+    expect(c.querySelector('[data-testid="cart-voucher-hint"]')).toBeNull();
+    const cta = c.querySelector<HTMLElement>('[data-testid="freeship-progress"] [data-testid="freeship-shop-more-cta"]');
     expect(cta?.textContent).toBe('Mua thêm');
     click(cta);
     expect(state.push).toHaveBeenCalledTimes(1);
     expect(state.push).toHaveBeenCalledWith('/');
+  });
+
+  it('đã đạt Miễn phí giao hàng nên đầu giỏ là dải Hộp Xanh: gợi ý mã sắp mở khoá đứng riêng ngay dưới, không mất', async () => {
+    const tiers = [{ minItems: 2, pct: 5 }, { minItems: 4, pct: 10 }];
+    state.cart = cartOf([line({ quantity: 2, total: 578000 })], { greenBox: { items: 2, tier: tiers[0], next: tiers[1], tiers, discount: 2500 } });
+    state.coupons = [GIAM45];
+    state.previews = [SAP_MO];
+    const c = await mount();
+    await settle();
+    expect(c.querySelector('[data-testid="freeship-progress"]')).toBeNull();
+    expect(c.querySelector('[data-testid="cart-voucher-hint"] [data-testid="cart-voucher-unlock"]')).not.toBeNull();
   });
 
   it('chỉ có mã dùng được, không có dòng sắp mở khoá: thân giỏ không có dải nào và không có nút "Mua thêm"; nút "Áp dụng" nằm ở hàng mã (W166)', async () => {
@@ -519,7 +533,7 @@ describe('/gio-hang — chỉ MỘT nút áp mã, ở cuối hàng "Mã giảm g
     await settle();
     expect(apply(c)).toBeNull();
     expect(bar(c).querySelector('[data-testid="coupon-cta"]')!.textContent).toBe('Chọn mã');
-    expect(c.querySelector('[data-testid="cart-voucher-unlock-cta"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="freeship-progress"] [data-testid="freeship-shop-more-cta"]')).not.toBeNull();
   });
 
   it('từ md: nút "Áp dụng" nằm ở hàng mã của khung tóm tắt (không phải thanh dính), thay "Chọn mã", cùng test-id và tên truy cập', async () => {

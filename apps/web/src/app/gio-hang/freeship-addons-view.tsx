@@ -11,7 +11,7 @@ import { settleWithin } from '@/lib/settle-within';
 import { addToCart } from '@/lib/shop-client';
 import type { useCardPricing } from '@/lib/use-card-pricing';
 import { useCartWrite } from '@/lib/use-cart-write';
-import { FreeshipAddonsPending, type FreeshipAddonsProps } from './freeship-addons';
+import { FreeshipAddonsPending, freeshipAddonsToggleLabel, type FreeshipAddonsProps } from './freeship-addons';
 import { pickFreeshipAddonItems } from './freeship-addons-pick';
 
 const ADD_KEY = ['freeship-add'] as const;
@@ -71,7 +71,7 @@ export function FreeshipAddonsView({ goal, lines, exclude, onShownChange, source
     return () => onShownChange(false);
   }, [shown, onShownChange]);
 
-  if (railGone && !error) return source.pending ? <FreeshipAddonsPending title={goal.headline} /> : null;
+  if (railGone && !error) return source.pending ? <FreeshipAddonsPending title={freeshipAddonsToggleLabel(goal)} /> : null;
   return (
     <>
       <FreeshipAddonRail
@@ -80,6 +80,7 @@ export function FreeshipAddonsView({ goal, lines, exclude, onShownChange, source
         items={picked}
         busySlug={busySlugs}
         onAdd={(item) => add.mutate(item)}
+        collapsible
       />
       {error && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">

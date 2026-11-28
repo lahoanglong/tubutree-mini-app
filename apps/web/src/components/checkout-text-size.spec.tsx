@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
 
@@ -23,11 +25,13 @@ const mount = (ui: React.ReactElement) => {
 
 // Chữ trên màn thanh toán ở điện thoại phải từ 13px (bậc caption); `text-xs` là 12px.
 describe('thanh toán: chữ nhỏ nhất là 13px', () => {
-  it('dòng đồng ý điều khoản dùng bậc caption', () => {
+  it('dòng đồng ý điều khoản dùng bậc caption (lớp `.tubu-consent-line` của mini.css, chung với Mini App)', () => {
     const c = mount(<OrderConsent />);
     const p = c.querySelector('[data-testid="order-consent"]')!;
-    expect(p.className).toContain('text-caption');
+    expect(p.className).toContain('tubu-consent-line');
     expect(p.className).not.toContain('text-xs');
+    const css = readFileSync(resolve(__dirname, 'mini/mini.css'), 'utf8');
+    expect(css).toMatch(/\.tubu-consent-line \{[^}]*font-size: var\(--type-caption-size\);/);
   });
 
   it('ô mã giới thiệu (chưa nhập) dùng bậc caption cho câu gợi ý và nút Nhập mã', () => {

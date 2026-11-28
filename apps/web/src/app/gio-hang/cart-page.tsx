@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { useEffect, useId, useRef, useState, type ComponentProps } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient, useMutationState } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
@@ -166,6 +166,8 @@ export default function CartPage() {
   }, [phase, guestCart.enabled, queryClient]);
   // Điện thoại: hàng mã giảm giá nằm trong thanh dính đáy (như Mini App); khổ lớn hơn: trong khung tóm tắt. Một thẻ duy nhất, nên chọn chỗ bằng JS.
   const phoneCoupon = useMediaQuery('(max-width: 767px)');
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const breakdownId = useId();
   const router = useRouter();
   const cartKeyNow = useCartKey();
   // Quay lại tab sau một lúc vắng: đọc lại giỏ để tồn kho và giá Giờ vàng là số mới (QueryClient của web tắt focus mặc định). Cùng luật với Mini App.
@@ -703,6 +705,15 @@ export default function CartPage() {
     />
   );
 
+  // Mã sắp mở khoá: thanh mốc đầu giỏ (`CartGoalBar`) hoặc dải riêng khi giỏ không có thanh; cùng khoá xem trước với hộp mã nên không thêm lượt gọi.
+  const voucherOpts: VoucherHintOpts = {
+    currentCode: cart?.couponCode,
+    subtotal: selectedSubtotal,
+    productIds: couponProductIds(pricingLines),
+    preview: pricingLines.length === 0 ? undefined : { storefrontSlug: ctvSlug, itemIds: pricingAll ? undefined : pricingLines.map((it) => it.id) },
+    previewKey: couponPreviewKey(pricingLines),
+  };
+
   return (
     <Shell>
       {mergeNote && (
@@ -754,26 +765,23 @@ export default function CartPage() {
                 {greenBoxView ? (
                   <GreenBoxStrip view={greenBoxView} onMore={() => router.push('/hop-xanh')} />
                 ) : (
-                  <FreeShippingProgressBar
+                  <CartGoalBar
                     base={freeshipBase}
                     threshold={cart.freeshipThreshold}
                     serverReached={serverFreeship}
                     tubuOnly={hasMerchant}
                     giftThreshold={cartGiftThreshold(giftTrialShown)}
                     onShopMore={() => router.push('/')}
+                    voucherOpts={voucherOpts}
                   />
                 )}
                 {aovGoal && <FreeshipAddons goal={aovGoal} lines={allItems} exclude={aovGiftExclusions(giftTrialShown ?? cart.giftTrial)} onShownChange={setAovRailShown} />}
               </CartUnlockSlot>
             )}
             <GreenBoxEvents state={greenBox} visible={greenBoxView !== null || greenBoxHint !== null} />
-            <CartVoucherHintSection
-              currentCode={cart.couponCode}
-              subtotal={selectedSubtotal}
-              productIds={couponProductIds(pricingLines)}
-              preview={pricingLines.length === 0 ? undefined : { storefrontSlug: ctvSlug, itemIds: pricingAll ? undefined : pricingLines.map((it) => it.id) }}
-              previewKey={couponPreviewKey(pricingLines)}
-            />
+            {/* Giỏ chỉ có MỘT thanh mốc (w47-01): có thanh Miễn phí giao hàng thì mã sắp mở khoá nằm trong thanh đó (`CartGoalBar`); thanh đó nhường
+                chỗ cho Hộp Xanh thì gợi ý mã đứng riêng. */}
+            {(!(showFreeship && freeship) || greenBoxView) && <CartVoucherHintSection {...voucherOpts} />}
             <label className="relative mb-3 flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium text-stone-900 max-md:mb-1 max-md:min-h-11 max-md:px-0 max-md:font-normal max-md:text-[length:var(--type-body-md-size)]">
               <span className={miniCheckboxWrap}>
                 <input
@@ -1015,56 +1023,65 @@ export default function CartPage() {
                 {payHint}
               </p>
             )}
-            {phoneCoupon && couponBox(true)}
-            <div className="mt-1 space-y-1">
-              {/* Từ md khung tóm tắt trong thân trang đã ghi các khoản giảm và "Tiết kiệm": thanh dính chỉ giữ tổng + nút, không lặp lại. */}
-              {(shownCombo > 0 || shownDiscount > 0 || shownTier > 0 || shipRow || greenBoxHint) && (
-                <div className="space-y-1 md:hidden">
-                  {shownComboOnly > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} tone="success" style={{ padding: 0 }} />}
-                  {shownGreenBox > 0 && <KeyValueRow label={fillCopy('greenBox.name')} value={`-${formatVnd(shownGreenBox)}`} tone="success" style={{ padding: 0 }} />}
-                  {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
-                  {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
-                  {ship ? (
-                    <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={{ padding: 0 }} dataDs="cart-ship-estimate" />
-                  ) : (
-                    shipRow && <KeyValueRow label={shipRow.feeLabel} value={shipRow.feeText} style={{ padding: 0 }} />
-                  )}
-                  {greenBoxHint && (
-                    <p data-testid="green-box-hint" className="text-caption text-success-fg">
-                      {greenBoxHint}
-                    </p>
-                  )}
-                </div>
+            {/* Chân dính gọn (w47-01), như Mini App: chi tiết tính tiền gập ngay trên hàng mã, hàng mã, rồi [Tổng · Tiết kiệm ▾ | Thanh toán]. Chạm khối tổng
+                mở/gập chi tiết; từ md khung tóm tắt trong thân trang đã ghi đủ các dòng nên chi tiết chỉ mở khi khách chạm. */}
+            <div id={breakdownId} data-testid="cart-breakdown" hidden={!breakdownOpen} className="tubu-cart-breakdown">
+              <KeyValueRow label={cartTotalLabel(0)} value={formatVnd(shownSubtotal)} style={{ padding: 0 }} />
+              {shownComboOnly > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} tone="success" style={{ padding: 0 }} />}
+              {shownGreenBox > 0 && <KeyValueRow label={fillCopy('greenBox.name')} value={`-${formatVnd(shownGreenBox)}`} tone="success" style={{ padding: 0 }} />}
+              {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
+              {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
+              {ship ? (
+                <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={{ padding: 0 }} dataDs="cart-ship-estimate" />
+              ) : (
+                shipRow && <KeyValueRow label={shipRow.feeLabel} value={shipRow.feeText} style={{ padding: 0 }} />
               )}
-              {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App). Khối tổng grow 1000 và không min-w-0, nên hàng chỉ xuống dòng khi số tiền (không ngắt được)
-                  rộng hơn chỗ còn lại (320px, 9 chữ số): nút xuống hàng riêng và giãn hết bề ngang thay vì cắt chữ hay chui dưới nút; chung hàng thì giữ 9.25rem. */}
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                <div className="flex-[1000_1_0%]">
-                  <div className="whitespace-nowrap text-label text-stone-600">{totalLabel}</div>
-                  <div data-testid="cart-total-value" className="whitespace-nowrap text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
-                    {formatVnd(shownTotal)}
-                  </div>
-                  {saving > 0 && (
-                    <div data-testid="cart-saving" className="text-caption font-semibold text-[color:var(--color-text-price-deal)] md:hidden">
-                      {fillCopy('cart.saving', { x: formatVnd(saving) })}
-                    </div>
-                  )}
-                </div>
-                {recovery ? (
-                  // Nhãn một chạm dài hơn "Thanh toán (n)": nút xuống hàng riêng dưới tổng và giãn hết bề ngang (như Mini App), không bị cắt chữ.
-                  <button type="button" ref={warmCheckoutRef} onClick={onDropSoldOut} aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_100%]`}>
-                    {recovery.cta}
-                  </button>
-                ) : payHint ? (
-                  <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
-                    Thanh toán ({selectedCount})
-                  </button>
-                ) : (
-                  <Link href="/thanh-toan" ref={warmCheckoutRef} onClick={onPay} className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
-                    Thanh toán ({selectedCount})
-                  </Link>
-                )}
+            </div>
+            {phoneCoupon && couponBox(true)}
+            {greenBoxHint && (
+              <p data-testid="green-box-hint" className="text-caption text-success-fg md:hidden">
+                {greenBoxHint}
+              </p>
+            )}
+            {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App). Khối tổng grow 1000 và không min-w-0, nên hàng chỉ xuống dòng khi số tiền (không ngắt được)
+                rộng hơn chỗ còn lại (320px, 9 chữ số): nút xuống hàng riêng và giãn hết bề ngang thay vì cắt chữ hay chui dưới nút; chung hàng thì giữ 9.25rem. */}
+            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <div className="flex-[1000_1_0%]">
+                <button
+                  type="button"
+                  data-testid="cart-total-toggle"
+                  className="tubu-cart-total tubu-press"
+                  aria-expanded={breakdownOpen}
+                  aria-controls={breakdownId}
+                  onClick={() => setBreakdownOpen((o) => !o)}
+                >
+                  <span className="tubu-cart-total-line">
+                    <span className="tubu-cart-total-label">{totalLabel}</span>
+                    <span data-testid="cart-total-value" className="tubu-cart-total-value">
+                      {formatVnd(shownTotal)}
+                    </span>
+                  </span>
+                  {/* Cùng màu deal với dòng "Tiết kiệm" của PDP; không có khoản tiết kiệm thì là lời mời xem chi tiết. */}
+                  <span data-testid={saving > 0 ? 'cart-saving' : 'cart-breakdown-hint'} data-plain={saving > 0 ? undefined : 'true'} className="tubu-cart-total-saving">
+                    {saving > 0 ? fillCopy('cart.saving', { x: formatVnd(saving) }) : fillCopy(breakdownOpen ? 'cart.breakdownHide' : 'cart.breakdownShow')}
+                    <ChevronDown size={14} aria-hidden="true" className="tubu-cart-total-chevron" />
+                  </span>
+                </button>
               </div>
+              {recovery ? (
+                // Nhãn một chạm dài hơn "Thanh toán (n)": nút xuống hàng riêng dưới tổng và giãn hết bề ngang (như Mini App), không bị cắt chữ.
+                <button type="button" ref={warmCheckoutRef} onClick={onDropSoldOut} aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_100%]`}>
+                  {recovery.cta}
+                </button>
+              ) : payHint ? (
+                <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
+                  Thanh toán ({selectedCount})
+                </button>
+              ) : (
+                <Link href="/thanh-toan" ref={warmCheckoutRef} onClick={onPay} className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
+                  Thanh toán ({selectedCount})
+                </Link>
+              )}
             </div>
           </div>
         </StickyActionBar>
@@ -1073,17 +1090,28 @@ export default function CartPage() {
   );
 }
 
-/**
- * Nhắc mã sắp mở khoá dưới thanh Miễn phí giao hàng. Tách thành component riêng để hook xem trước chạy độc lập với phần còn lại của trang, như `CartVoucherHintSection`
- * của Mini App. Mời áp mã đã đủ điều kiện không ở đây mà ở nút "Áp dụng" của `CartCouponBox`: một hành động, một nút.
- */
-function CartVoucherHintSection(props: {
+type VoucherHintOpts = {
   currentCode: string | null | undefined;
   subtotal: number;
   productIds?: string[] | undefined;
   preview?: CouponPreviewParams | undefined;
   previewKey: string;
-}) {
+};
+
+/**
+ * Thanh mốc DUY NHẤT ở đầu giỏ (w47-01), như `CartGoalBar` của Mini App: thanh Miễn phí giao hàng/Quà dùng thử gộp nhắc mã sắp mở khoá, nói mốc gần nhất kèm
+ * một nút "Mua thêm". Tách component để hook xem trước mã chạy độc lập với phần còn lại của trang.
+ */
+function CartGoalBar({ voucherOpts, ...bar }: Omit<ComponentProps<typeof FreeShippingProgressBar>, 'voucher'> & { voucherOpts: VoucherHintOpts }) {
+  const v = useCartVoucherHint(voucherOpts);
+  return <FreeShippingProgressBar {...bar} voucher={v.hint?.unlock ?? null} />;
+}
+
+/**
+ * Nhắc mã sắp mở khoá khi giỏ không có thanh Miễn phí giao hàng (chỉ hàng gian hàng tự giao): vẫn là thanh duy nhất ở đầu giỏ, như `CartVoucherHintSection` của
+ * Mini App. Mời áp mã đã đủ điều kiện không ở đây mà ở nút "Áp dụng" của `CartCouponBox`: một hành động, một nút.
+ */
+function CartVoucherHintSection(props: VoucherHintOpts) {
   const v = useCartVoucherHint(props);
   const router = useRouter();
   return <CartVoucherHintStrip hint={v.hint} onShopMore={() => router.push('/')} />;

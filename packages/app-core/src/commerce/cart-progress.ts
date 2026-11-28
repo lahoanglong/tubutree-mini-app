@@ -164,3 +164,17 @@ export function computeRefillValueComparison(
     bottlesReplaced,
   };
 }
+
+/**
+ * Giỏ chỉ có MỘT thanh mốc ở đầu (w47-01): thanh Miễn phí giao hàng/Quà dùng thử và nhắc mã sắp mở khoá (`cartVoucherHint().unlock`) gộp làm một,
+ * hiện mốc gần nhất còn thiếu kèm một nút "Mua thêm". `progress` = mốc của thanh (Miễn phí giao hàng rồi Quà); `voucher` = mã sắp mở khoá.
+ * Hoà thì giữ mốc của thanh. Thanh đã đạt hết mà còn mã sắp mở khoá thì nói mã (mốc còn thiếu duy nhất).
+ */
+export type CartGoalPick = 'progress' | 'voucher';
+
+export function cartGoalPick(p: Pick<CartThresholdProgress, 'next' | 'freeship' | 'gift'>, unlock: { missing: number } | null | undefined): CartGoalPick {
+  if (!unlock || !finite(unlock.missing) || unlock.missing <= 0) return 'progress';
+  const next = p.next === 'freeship' ? p.freeship : p.next === 'gift' ? p.gift : null;
+  if (!next) return 'voucher';
+  return unlock.missing < next.remaining ? 'voucher' : 'progress';
+}

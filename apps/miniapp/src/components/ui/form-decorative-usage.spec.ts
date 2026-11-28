@@ -77,7 +77,7 @@ describe('chấm Checkbox/Radio/Switch không tên (thuần hình, inert)', () =
 
   it('không vô nghĩa: quét thấy các chấm không tên đã biết ở checkout và subscription-options', () => {
     const decorative = (file: string) => scanUnnamedControls(sources.find((s) => s.file === file)!.text).filter((u) => u.verdict === 'ok');
-    expect(decorative('pages/checkout.tsx').length).toBeGreaterThanOrEqual(3);
+    expect(decorative('pages/checkout.tsx').length).toBeGreaterThanOrEqual(2);
     expect(decorative('components/subscription-options.tsx').length).toBeGreaterThanOrEqual(1);
   });
 });

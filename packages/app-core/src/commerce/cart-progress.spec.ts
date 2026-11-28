@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CART_PROGRESS_COPY,
   CART_PROGRESS_COPY_MAX,
+  cartGoalPick,
   cartGiftThreshold,
   cartProgressCopy,
   computeCartThresholdProgress,
@@ -186,5 +187,24 @@ describe('CART_PROGRESS_COPY', () => {
       expect(CART_PROGRESS_COPY_MAX[key], key).toBeGreaterThan(0);
       expect(cartProgressCopy(key, vars).length, key).toBeLessThanOrEqual(CART_PROGRESS_COPY_MAX[key]);
     }
+  });
+});
+
+describe('cartGoalPick (một thanh mốc ở đầu giỏ)', () => {
+  const p = (base: number, gift?: number) => computeCartThresholdProgress(base, { freeshipThreshold: 199_000, giftThreshold: gift });
+  it('không có mã sắp mở khoá: thanh mốc', () => {
+    expect(cartGoalPick(p(100_000), null)).toBe('progress');
+  });
+  it('mã gần hơn mốc Miễn phí giao hàng thì nói mã; xa hơn hay hoà thì nói mốc', () => {
+    expect(cartGoalPick(p(100_000), { missing: 50_000 })).toBe('voucher');
+    expect(cartGoalPick(p(100_000), { missing: 120_000 })).toBe('progress');
+    expect(cartGoalPick(p(100_000), { missing: 99_000 })).toBe('progress');
+  });
+  it('đã Miễn phí giao hàng, còn mốc quà: so với mốc quà', () => {
+    expect(cartGoalPick(p(200_000, 299_000), { missing: 50_000 })).toBe('voucher');
+    expect(cartGoalPick(p(200_000, 299_000), { missing: 150_000 })).toBe('progress');
+  });
+  it('đạt hết mốc mà còn mã sắp mở khoá: nói mã', () => {
+    expect(cartGoalPick(p(300_000), { missing: 20_000 })).toBe('voucher');
   });
 });

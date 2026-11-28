@@ -1,6 +1,5 @@
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { Button } from '../ui/button';
-import { Text } from '../ui/text';
+import '../../css/declutter.css';
 
 export interface PdpRebuyRowProps {
   /** "dd/mm" của lần mua (đơn đã giao) gần nhất, từ `pdpRebuy`. */
@@ -14,41 +13,26 @@ export interface PdpRebuyRowProps {
 }
 
 /**
- * "Bạn đã mua ngày dd/mm · Mua lại": một chạm thêm đúng phân loại lần trước, số lượng 1. Nút phụ, không tranh với nút mua ở thanh dưới.
- * Gói Refill của chai là khối riêng ngay sau dòng này (`PdpRefillOffer`, cho mọi khách), không nằm trong dòng.
+ * Một dòng nhỏ "Bạn đã mua ngày dd/mm · Mua lại" (w47-01: nút chữ, không còn nút viền): một chạm thêm đúng phân loại lần trước, số lượng 1. Không tranh với
+ * nút mua ở thanh dưới; gói Refill và Đặt định kỳ nằm ở dải chọn cách mua ngay sau dòng này (`PdpBuyModes`).
  */
-export function PdpRebuyRow({
-  dateLabel,
-  variationName,
-  busy,
-  blocked,
-  onRebuy,
-}: PdpRebuyRowProps) {
+export function PdpRebuyRow({ dateLabel, variationName, busy, blocked, onRebuy }: PdpRebuyRowProps) {
   return (
-    <div
-      data-pdp-block="rebuy"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 'var(--space-inline-sm)',
-        padding: '0 var(--space-inset-page) var(--space-inset-card)',
-        background: 'var(--color-bg-surface)',
-      }}
-    >
-      <Text variant="body-sm" tone="secondary" numeric style={{ minWidth: 0 }}>
-        {fillCopy('pdp.rebuyLine', { date: dateLabel })}
-      </Text>
-      <Button
-        variant="secondary"
-        loading={busy}
-        aria-disabled={blocked || undefined}
+    <div data-pdp-block="rebuy" className="tubu-rebuy">
+      <p className="tubu-rebuy-text">{fillCopy('pdp.rebuyLine', { date: dateLabel })}</p>
+      <button
+        type="button"
+        className="tubu-rebuy-cta tubu-press tubu-hit-44"
+        aria-busy={busy || undefined}
+        aria-disabled={blocked || busy || undefined}
         aria-label={fillCopy('pdp.rebuySpoken', { name: variationName, date: dateLabel })}
-        onPress={onRebuy}
-        style={{ flex: '0 0 auto', minWidth: 0 }}
+        onClick={() => {
+          if (blocked || busy) return;
+          onRebuy();
+        }}
       >
         {fillCopy('pdp.rebuyCta')}
-      </Button>
+      </button>
     </div>
   );
 }

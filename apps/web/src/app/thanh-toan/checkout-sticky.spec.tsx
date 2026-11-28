@@ -93,7 +93,7 @@ afterEach(() => {
 });
 
 describe('/thanh-toan — nút Đặt hàng ở khung tóm tắt (từ lg) ghi số tiền như Mini (K2)', () => {
-  const lgButton = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-mini-part="place-order"] button')!;
+  const lgButton = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-mini-part="place-order"] button:not([data-testid="order-consent"])')!;
 
   it('có báo giá: "Đặt hàng · 330.000đ", cùng chữ với nút trên thanh dính', async () => {
     const c = await mount();
@@ -258,22 +258,27 @@ describe('/thanh-toan — thanh dính đáy', () => {
     expect(inCard!.className).toMatch(/\blg:inline-flex\b/);
   });
 
-  it('dòng đồng ý điều khoản nằm ngay trên nút Đặt hàng ở thanh dính và ở khung tóm tắt, có link tới đủ năm chính sách Bộ Công Thương yêu cầu, không có ô tick', async () => {
+  it('dòng đồng ý điều khoản (w47-01): một dòng ngay trên nút Đặt hàng ở điện thoại và ở khung tóm tắt, mở tấm đủ năm chính sách Bộ Công Thương yêu cầu, không có ô tick', async () => {
     const c = await mount();
-    const lines = Array.from(c.querySelectorAll<HTMLElement>('[data-testid="order-consent"]'));
+    const lines = Array.from(c.querySelectorAll<HTMLButtonElement>('[data-testid="order-consent"]'));
     expect(lines).toHaveLength(2);
     for (const line of lines) {
-      expect(line.textContent).toBe('Bằng việc đặt hàng, bạn đồng ý với: Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán.');
-      expect(Array.from(line.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('aria-label'), a.getAttribute('href')])).toEqual([
-        ['Điều khoản', null, '/chinh-sach/dieu-khoan'],
-        ['Bảo mật', 'Chính sách bảo mật', '/chinh-sach/bao-mat'],
-        ['Đổi trả', 'Chính sách đổi trả', '/chinh-sach/doi-tra'],
-        ['Vận chuyển', 'Chính sách vận chuyển', '/chinh-sach/van-chuyen'],
-        ['Thanh toán', 'Chính sách thanh toán', '/chinh-sach/thanh-toan'],
-      ]);
+      expect(line.tagName).toBe('BUTTON');
+      expect(line.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(line.textContent).toBe('Đặt đơn nghĩa là bạn đồng ý Điều khoản & Chính sách');
     }
-    const desk = lines.find((l) => /\blg:block\b/.test(l.className))!;
-    expect(desk.nextElementSibling?.tagName).toBe('BUTTON');
+    click(lines[0]!);
+    await flush(2);
+    const sheet = document.querySelector<HTMLElement>('[data-testid="order-consent-policies"]')!;
+    expect(Array.from(sheet.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Điều khoản sử dụng', '/chinh-sach/dieu-khoan'],
+      ['Chính sách bảo mật', '/chinh-sach/bao-mat'],
+      ['Chính sách đổi trả', '/chinh-sach/doi-tra'],
+      ['Chính sách vận chuyển', '/chinh-sach/van-chuyen'],
+      ['Chính sách và hình thức thanh toán', '/chinh-sach/thanh-toan'],
+    ]);
+    const desk = lines.find((l) => /\blg:block\b/.test(l.parentElement!.className))!;
+    expect(desk.parentElement!.nextElementSibling?.tagName).toBe('BUTTON');
     expect(c.querySelector('[data-mini-part="place-order"]')!.contains(desk)).toBe(true);
     expect(bar(c)!.querySelector('input[type="checkbox"]')).toBeNull();
   });
@@ -286,11 +291,12 @@ describe('/thanh-toan — thanh dính đáy', () => {
 });
 
 describe('/thanh-toan — radio/checkbox đủ lớn (≥ 24px)', () => {
-  it('radio thanh toán và ô dùng Điểm Xanh đều h-6 w-6 (địa chỉ là một dòng chạm mở tấm chọn, không còn radio)', async () => {
+  it('radio thanh toán và ô tick đều h-6 w-6 (địa chỉ là một dòng chạm mở tấm chọn, không còn radio); Điểm Xanh là công tắc .tubu-switch', async () => {
     state.points = 50;
     const c = await mount();
-    const controls = Array.from(c.querySelectorAll<HTMLInputElement>('input[type="radio"], input[type="checkbox"]'));
-    expect(controls.length).toBeGreaterThanOrEqual(3);
+    expect(c.querySelector('[data-mini-block="points"] input[role="switch"]')!.className).toContain('tubu-switch');
+    const controls = Array.from(c.querySelectorAll<HTMLInputElement>('input[type="radio"], input[type="checkbox"]:not([role="switch"])'));
+    expect(controls.length).toBeGreaterThanOrEqual(2);
     const small = controls.filter((el) => !/\bh-6\b/.test(el.className) || !/\bw-6\b/.test(el.className));
     expect(small.map((el) => el.outerHTML.slice(0, 100))).toEqual([]);
   });
@@ -300,7 +306,7 @@ describe('/thanh-toan — 375px theo số đo Mini (K2)', () => {
   it('dòng đồng ý điều khoản ở điện thoại nằm cuối nội dung, sau khối tóm tắt, không trong thanh dính', async () => {
     const c = await mount();
     const lines = Array.from(c.querySelectorAll<HTMLElement>('[data-testid="order-consent"]'));
-    const phone = lines.find((l) => /\blg:hidden\b/.test(l.className))!;
+    const phone = lines.find((l) => /\blg:hidden\b/.test(l.parentElement!.className))!;
     expect(phone).toBeDefined();
     expect(bar(c)!.contains(phone)).toBe(false);
     expect(lines.filter((l) => bar(c)!.contains(l))).toHaveLength(0);
@@ -309,44 +315,45 @@ describe('/thanh-toan — 375px theo số đo Mini (K2)', () => {
     expect(phone.compareDocumentPosition(bar(c)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('khách chưa có điểm: khối Điểm Xanh ở điện thoại vẫn hiện như Mini với lời mời tích điểm, ô tick khoá', async () => {
+  it('khách chưa có điểm: hàng Điểm Xanh vẫn hiện như Mini với lời mời tích điểm, không có công tắc tắt giả', async () => {
     state.points = 0;
     const c = await mount();
-    const none = c.querySelector<HTMLElement>('[data-testid="points-none"]')!;
-    expect(none).not.toBeNull();
-    expect(none.className).toMatch(/\bmd:hidden\b/);
-    expect(none.closest('[data-mini-block="points"]')).not.toBeNull();
-    expect(none.textContent).toContain('Điểm Xanh');
-    expect(none.textContent).toContain('Tích điểm từ đơn đầu tiên nhé');
-    expect(none.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+    const row = c.querySelector<HTMLElement>('[data-testid="checkout-points"]')!;
+    expect(row.closest('[data-mini-block="points"]')).not.toBeNull();
+    expect(row.textContent).toContain('Điểm Xanh');
+    expect(row.textContent).toContain('Tích điểm từ đơn đầu tiên nhé');
+    expect(row.querySelector('input')).toBeNull();
   });
 
-  it('khách có điểm dùng được: không có khối lời mời tích điểm', async () => {
+  it('khách có điểm dùng được: không có lời mời tích điểm, có công tắc', async () => {
     state.points = 50;
     state.userPoints = 50;
     const c = await mount();
-    expect(c.querySelector('[data-testid="points-none"]')).toBeNull();
+    expect(c.textContent).not.toContain('Tích điểm từ đơn đầu tiên');
+    expect(c.querySelector('[data-testid="checkout-points"] input[role="switch"]')).not.toBeNull();
   });
 
   it('khách có điểm nhưng chưa chọn địa chỉ (chưa có báo giá): ghi số dư như Mini, không mời tích điểm', async () => {
     state.noAddress = true;
     state.userPoints = 50;
     const c = await mount();
-    const idle = c.querySelector<HTMLElement>('[data-testid="points-none"]')!;
-    expect(idle.textContent).toContain('Bạn đang có 50 điểm');
+    const row = c.querySelector<HTMLElement>('[data-testid="checkout-points"]')!;
+    expect(row.textContent).toContain('Bạn đang có 50 điểm');
     expect(c.textContent).not.toContain('Tích điểm từ đơn đầu tiên');
-    expect(idle.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+    expect(row.querySelector('input')).toBeNull();
   });
 
-  it('toàn bộ điểm đang giữ (dùng được 0): ghi số dư, không mời tích điểm cạnh dòng "chưa dùng được"', async () => {
+  it('toàn bộ điểm đang giữ (dùng được 0): ghi số dư, không mời tích điểm; câu "chưa dùng được" trong tấm ⓘ', async () => {
     state.points = 50;
     state.redeemable = 0;
     state.userPoints = 50;
     const c = await mount();
-    const idle = c.querySelector<HTMLElement>('[data-testid="points-none"]')!;
-    expect(idle.textContent).toContain('Bạn đang có 50 điểm');
-    expect(c.textContent).toContain('chưa dùng được');
+    const row = c.querySelector<HTMLElement>('[data-testid="checkout-points"]')!;
+    expect(row.textContent).toContain('Bạn đang có 50 điểm');
     expect(c.textContent).not.toContain('Tích điểm từ đơn đầu tiên');
+    click(row.querySelector('button[aria-label="Cách dùng Điểm Xanh"]'));
+    await flush(2);
+    expect(document.querySelector('[data-testid="checkout-points-info"]')!.textContent).toContain('chưa dùng được');
   });
 
   it('dòng tóm tắt: đệm 6px dưới md rồi trả về dòng cũ từ md, không thêm max-md', async () => {

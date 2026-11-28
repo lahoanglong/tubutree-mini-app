@@ -193,18 +193,19 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
     noteCounterVisible: false,
     vatLabel: 'Yêu cầu xuất hoá đơn VAT',
     vatCheckboxOnRight: true,
-    pointsTitle: 'Điểm Xanh',
-    pointsSubtext: 'Dùng 100 điểm, giảm 100đ trong đó 50 điểm không hết hạn, trả tới 100% giá trị hàng',
-    consentText: 'Bằng việc đặt hàng, bạn đồng ý với: Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán.',
+    // Một dòng có công tắc (w47-01); ghi chú điểm (phần không hết hạn, trần) nằm trong tấm ⓘ, không còn dòng phụ.
+    pointsText: 'Dùng 100 Điểm Xanh (-100đ)',
+    pointsInfoButton: true,
+    consentText: 'Đặt đơn nghĩa là bạn đồng ý Điều khoản & Chính sách',
     consentAboveButton: true,
     consentGapToButton: 'gần',
     walletLabel: 'Ví Tubu (350.000đ)',
   };
   // Vị trí ngang (px CSS ở 375) của Mini làm chuẩn; web phải khớp ±2px.
   const POS_TOLERANCE = 2;
-  const MINI_POS = { vatCheckboxRight: 339, pointsCheckboxRight: 339, payTextLeft: 70 };
+  const MINI_POS = { vatCheckboxRight: 339, pointsSwitchRight: 355, payTextLeft: 70 };
 
-  test('ghi chú một dòng không hiện bộ đếm, ô VAT bên phải, điểm Xanh cùng chữ, câu đồng ý sát nút Đặt hàng', async ({ page, api }, testInfo) => {
+  test('ghi chú một dòng không hiện bộ đếm, ô VAT bên phải, Điểm Xanh một dòng có công tắc, câu đồng ý một dòng sát nút Đặt hàng', async ({ page, api }, testInfo) => {
     const side = sideOf(testInfo.project.name);
     mockCheckout(api);
     api.allowUnmocked('POST /events');
@@ -237,8 +238,6 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
     });
     const vatCheckboxOnRight = vatTextLeft < 40;
 
-    const pointsTitle = page.getByText('Điểm Xanh', { exact: true }).first();
-    await pointsTitle.scrollIntoViewIfNeeded();
     const rightOfCheckbox = (label: typeof vat) =>
       label.evaluate((el) => {
         let row: Element | null = el;
@@ -248,18 +247,15 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
       });
     const vatCheckboxRight = await rightOfCheckbox(vat);
 
-    const pointsBlockText = (await pointsTitle.locator('xpath=..').innerText()).replace(/\s+/g, ' ').trim();
-    // Web đặt các dòng ghi chú điểm (phần không hết hạn, trần) ngay dưới ô; Mini để trong cùng khối chữ. Chữ khách đọc được thì giống nhau.
-    const notesBelow = await pointsTitle.evaluate((el) => {
-      const out: string[] = [];
-      for (let n = el.closest('label')?.nextElementSibling ?? null; n && n.tagName === 'P'; n = n.nextElementSibling) if (n.checkVisibility()) out.push((n as HTMLElement).innerText);
-      return out.join(' ');
+    const pointsRow = page.locator('[data-testid="checkout-points"]:visible').first();
+    await pointsRow.scrollIntoViewIfNeeded();
+    const pointsText = (await pointsRow.locator('.tubu-points-row-text').innerText()).replace(/\s+/g, ' ').trim();
+    const pointsInfoButton = (await pointsRow.getByRole('button', { name: 'Cách dùng Điểm Xanh' }).count()) === 1;
+    // Mép phải của chính công tắc (input `role="switch"`), so vị trí Mini.
+    const pointsSwitchRight = await pointsRow.evaluate((el) => {
+      const sw = el.querySelector('[role="switch"]');
+      return sw ? Math.round(sw.getBoundingClientRect().right) : -1;
     });
-    // Mini để các dòng ghi chú trong cùng khối chữ cạnh ô tick: web ở 375 không còn dòng ghi chú riêng dưới ô.
-    expect(notesBelow, 'ghi chú điểm Xanh phải nằm trong khối chữ cạnh ô tick, không có dòng riêng dưới ô').toBe('');
-    const pointsSubtext = pointsBlockText.replace(/^Điểm Xanh\s*/, '').replace(/\s+/g, ' ').trim();
-
-    const pointsCheckboxRight = await rightOfCheckbox(pointsTitle);
 
     const walletText = page.getByText(/^Ví Tubu \(/).first();
     await walletText.scrollIntoViewIfNeeded();
@@ -287,14 +283,14 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
       noteCounterVisible,
       vatLabel: (await vat.innerText()).trim(),
       vatCheckboxOnRight,
-      pointsTitle: (await pointsTitle.innerText()).trim(),
-      pointsSubtext,
+      pointsText,
+      pointsInfoButton,
       consentText,
       consentAboveButton: gap >= 0,
       consentGapToButton: gap <= 120 ? 'gần' : `xa ${Math.round(gap)}px`,
       walletLabel: (await walletText.innerText()).trim(),
     };
-    const positions = { vatCheckboxRight, pointsCheckboxRight, payTextLeft };
+    const positions = { vatCheckboxRight, pointsSwitchRight, payTextLeft };
     const file = testInfo.outputPath(`checkout-form-${side}.json`);
     writeFileSync(file, `${JSON.stringify(got, null, 2)}\n`);
     writeFileSync(testInfo.outputPath(`checkout-pos-${side}.json`), `${JSON.stringify(positions)}\n`);
@@ -311,7 +307,7 @@ test.describe('ds-parity: thanh toán 375px, dòng điểm từ đơn sàn (W43)
   const MARKET = 999_999;
   const LINE = 'Gồm 999.999 điểm từ đơn sàn, giảm ngay';
 
-  test('có điểm từ đơn sàn: một dòng trong cột chữ cạnh ô tick, ô tick vẫn ở 339 ±2 như Mini', async ({ page, api }, testInfo) => {
+  test('có điểm từ đơn sàn: một dòng trong tấm ⓘ "Cách dùng Điểm Xanh" (w47-01: ghi chú điểm rời hàng Điểm Xanh vào tấm)', async ({ page, api }, testInfo) => {
     const side = sideOf(testInfo.project.name);
     mockCheckout(api);
     api.allowUnmocked('POST /events');
@@ -334,30 +330,21 @@ test.describe('ds-parity: thanh toán 375px, dòng điểm từ đơn sàn (W43)
     await expect(page.locator('[data-ds="checkout-summary-total"]').first()).toBeVisible({ timeout: 20_000 });
     await page.evaluate(() => document.fonts.ready);
 
-    const note = page.locator('[data-points-marketplace]:visible');
+    const row = page.locator('[data-testid="checkout-points"]:visible').first();
+    await row.scrollIntoViewIfNeeded();
+    await row.getByRole('button', { name: 'Cách dùng Điểm Xanh' }).click();
+    const note = page.locator('[data-points-note="marketplace"]:visible');
     await expect(note).toHaveCount(1);
-    await note.scrollIntoViewIfNeeded();
     const got = await note.evaluate((el) => {
-      let row: Element | null = el;
-      while (row && !row.querySelector('input[type=checkbox]')) row = row.parentElement;
-      const box = row!.querySelector('input[type=checkbox]')!.getBoundingClientRect();
-      const title = Array.from(row!.querySelectorAll('span, div')).find((n) => n.textContent?.trim() === 'Điểm Xanh')!;
       const range = document.createRange();
       range.selectNodeContents(el);
       const lines = new Set(Array.from(range.getClientRects()).filter((r) => r.width > 0).map((r) => Math.round(r.top))).size;
-      const text = el.getBoundingClientRect();
-      return {
-        text: (el as HTMLElement).innerText.trim(),
-        lines,
-        insideTextColumn: text.right <= box.left + 1,
-        leftOfTitle: Math.round(text.left - title.getBoundingClientRect().left),
-        checkboxRight: Math.round(box.right),
-      };
+      const box = el.getBoundingClientRect();
+      return { text: (el as HTMLElement).innerText.trim(), lines, insideViewport: box.left >= 0 && box.right <= window.innerWidth };
     });
     if (process.env.PARITY_SHOT_DIR) await page.screenshot({ path: `${process.env.PARITY_SHOT_DIR}/checkout-points-marketplace-${side}375.png` });
     await testInfo.attach(`points-marketplace-${side}`, { body: JSON.stringify(got), contentType: 'application/json' });
-    expect(got).toEqual({ text: LINE, lines: 1, insideTextColumn: true, leftOfTitle: 0, checkboxRight: got.checkboxRight });
-    expect(Math.abs(got.checkboxRight - 339), `ô tick ${got.checkboxRight} so với Mini 339`).toBeLessThanOrEqual(2);
+    expect(got).toEqual({ text: LINE, lines: 1, insideViewport: true });
   });
 });
 

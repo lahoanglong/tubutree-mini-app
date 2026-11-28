@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render } from '@testing-library/react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
@@ -78,9 +80,26 @@ function declared(el: HTMLElement, axis: 'w' | 'h'): number {
   return Math.max(px(axis === 'w' ? s.width : s.height), px(axis === 'w' ? s.minWidth : s.minHeight));
 }
 
+/**
+ * Lớp của `declutter.css` (w47-01) tự khai vùng chạm trong CSS thay vì style viết tay: đọc chính tệp CSS, lớp đạt khi luật của nó có `height`/`min-height` >= 44px
+ * và bề ngang (`width: 100%`, `width`/`min-width` >= 44px). Sửa số đo trong CSS xuống dưới 44 thì guard đỏ ngay.
+ */
+const CSS_HIT_CLASSES = (() => {
+  const css = readFileSync(resolve(__dirname, '../../css/declutter.css'), 'utf-8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const out = new Set<string>();
+  for (const m of css.matchAll(/(?:^|\n)\.([\w-]+)\s*\{([^}]*)\}/g)) {
+    const body = m[2]!;
+    const h = /(?:^|[;\s])(?:min-)?height:\s*(\d+)px/.exec(body);
+    const w = /(?:^|[;\s])(?:min-)?width:\s*(100%|(\d+)px)/.exec(body);
+    if (h && Number(h[1]) >= 44 && w && (w[1] === '100%' || Number(w[2]) >= 44)) out.add(m[1]!);
+  }
+  return out;
+})();
+
 function reaches44(el: HTMLElement): boolean {
   // `tubu-input`: ô nhập DS cao 48px, rộng theo khối (tokens.css, `input.spec.tsx` canh chiều cao).
   if (/\btubu-hit-44(-square)?\b|\btouch-target\b|\btubu-input\b/.test(el.className)) return true;
+  if (el.classList && [...el.classList].some((c) => CSS_HIT_CLASSES.has(c))) return true;
   for (let node: HTMLElement | null = el; node && node.parentElement !== document.body; node = node.parentElement) {
     if (declared(node, 'w') >= 44 && declared(node, 'h') >= 44) return true;
     // Chiều rộng do bố cục quyết định: nút ZaUI (min-width 120px trong CSS) và hàng <div> block full-width.
@@ -262,6 +281,10 @@ describe('vùng chạm DS v2 >= 44x44', () => {
       // ZaUI vẽ input checkbox/radio/switch đè lên ô gốc; vùng chạm là khối hitArea bọc ngoài.
       expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
     }
+  });
+
+  it('declutter.css: các lớp nút của w47-01 tự khai vùng chạm >= 44px (guard đọc đúng tệp CSS)', () => {
+    for (const c of ['tubu-buy-mode', 'tubu-buy-mode-action', 'tubu-pdp-detail-toggle', 'tubu-points-row-info', 'tubu-consent-line']) expect(CSS_HIT_CLASSES.has(c), c).toBe(true);
   });
 
   it('QuickReorderStrip: thân thẻ và "+ Thêm" đạt 44x44; "Thêm lại tất cả" của tiêu đề khai minHeight 44', () => {

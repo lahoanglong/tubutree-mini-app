@@ -1,41 +1,11 @@
-import { useId, useState, type CSSProperties } from 'react';
-import { ChevronDown, MapPin } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import { MapPin } from 'lucide-react';
 import { pdpOriginCopy, type PdpOriginView } from '@tubutree/app-core/commerce/pdp-origin';
-import { haptic } from '../../utils/haptic';
 import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
+import { PdpDetailRow } from './pdp-detail-row';
 
-const BAND: CSSProperties = {
-  marginTop: 'var(--space-stack-sm)',
-  padding: 'var(--space-stack-xs) var(--space-inset-page)',
-  background: 'var(--color-bg-surface)',
-};
-// Dòng tiêu đề cao bằng tiêu đề khối (`--section-header-h`), bấm cả dòng để gập/mở.
-const TOGGLE: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 'var(--space-inline-sm)',
-  width: '100%',
-  minHeight: 'var(--section-header-h)',
-  padding: 0,
-  border: 'none',
-  background: 'transparent',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  textAlign: 'left',
-  color: 'var(--color-text-primary)',
-};
-const TITLE: CSSProperties = {
-  flex: '1 1 0%',
-  minWidth: 0,
-  fontSize: 'var(--type-title-sm-size)',
-  lineHeight: 'var(--type-title-sm-lh)',
-  fontWeight: 700,
-  letterSpacing: '-0.01em',
-};
-const HINT: CSSProperties = { flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
-// Chỉ gắn khi đang mở: `display` viết tay đè lên thuộc tính `hidden` của trình duyệt, khối gập vẫn hiện.
-const LIST: CSSProperties = { margin: 0, padding: '0 0 var(--space-stack-sm)', display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' };
+const LIST: CSSProperties = { margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' };
 const MAP_LINK: CSSProperties = {
   display: 'flex',
   width: 'fit-content',
@@ -53,37 +23,15 @@ const MAP_LINK: CSSProperties = {
 };
 
 /**
- * Khối "Nguồn gốc & cách dùng" (`pdpOriginView` của app-core): gập sẵn thành một dòng tiêu đề kèm tỉnh của nhãn để đọc lướt, mở ra là các dòng
- * Đến từ, Cách dùng, Bảo quản, Hạn dùng/số lô. Cùng số đo với khối web (`pdp-origin-guide.tsx`, thẻ `<details>`).
+ * Dòng "Nguồn gốc & cách dùng" của dải Chi tiết sản phẩm (`pdpOriginView` của app-core): gập sẵn kèm tỉnh của nhãn để đọc lướt, mở ra là các dòng
+ * Đến từ, Cách dùng, Bảo quản, Hạn dùng/số lô. Cùng số đo với khối web (`pdp-origin-guide.tsx`).
  * Lối bản đồ chỉ có khi đầu trang chưa có chip xuất xứ (`view.map`), để một hành động chỉ có một lối.
  */
 export function PdpOriginGuide({ view, onOpenMap }: { view: PdpOriginView | null; onOpenMap: (id: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const bodyId = useId();
   if (!view) return null;
   return (
-    <section data-pdp-block="origin" data-testid="pdp-origin" aria-label={view.title} style={BAND}>
-      <button
-        type="button"
-        className="tubu-press tubu-hit-44"
-        data-testid="pdp-origin-toggle"
-        aria-expanded={open}
-        aria-controls={bodyId}
-        onClick={() => {
-          haptic('light');
-          setOpen((o) => !o);
-        }}
-        style={TOGGLE}
-      >
-        <span style={TITLE}>{view.title}</span>
-        {view.hint && !open && (
-          <Text variant="caption" tone="secondary" style={HINT}>
-            {view.hint}
-          </Text>
-        )}
-        <Icon icon={ChevronDown} size="sm" tone="muted" style={{ flex: 'none', transform: open ? 'rotate(180deg)' : undefined }} />
-      </button>
-      <dl id={bodyId} hidden={!open} style={open ? LIST : undefined}>
+    <PdpDetailRow block="origin" title={view.title} hint={view.hint}>
+      <dl style={LIST}>
         {view.rows.map((row) => (
           <div key={row.key} data-testid={`pdp-origin-${row.key}`}>
             <Text variant="caption" tone="secondary" as="dt">
@@ -116,6 +64,6 @@ export function PdpOriginGuide({ view, onOpenMap }: { view: PdpOriginView | null
           </div>
         ))}
       </dl>
-    </section>
+    </PdpDetailRow>
   );
 }

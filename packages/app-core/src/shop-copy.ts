@@ -340,10 +340,22 @@ export const SHOP_COPY: Record<string, string> = {
   // Dòng Đặt định kỳ: số % đọc từ cấu hình; cấu hình thiếu thì không nêu số.
   'pdp.subscribeSave': 'Đặt định kỳ — tiết kiệm {pct}%',
   'pdp.subscribeSaveNoPct': 'Đặt định kỳ — tiết kiệm mỗi kỳ',
+  // Dải chọn cách mua (w47-01): một hàng nút ở dưới Số lượng thay ba khối chồng nhau; dòng phụ chỉ khi có số để nói.
+  'pdp.modesLabel': 'Cách mua',
+  'pdp.modeRetail': 'Mua lẻ',
+  'pdp.modeRefillBag': 'Túi Refill',
+  'pdp.modeRefillCan': 'Can Refill',
+  'pdp.modeSubscribe': 'Định kỳ',
+  'pdp.modeSave': 'Tiết kiệm {pct}%',
+  'pdp.modeSaveApprox': 'Tiết kiệm ~{pct}%',
+  // Điểm nổi bật (tối đa 3 dòng) và dải "Chi tiết sản phẩm" gồm các dòng gập sẵn.
+  'pdp.highlights': 'Điểm nổi bật',
+  'pdp.certifications': 'Chứng nhận',
+  'pdp.details': 'Chi tiết sản phẩm',
+  'pdp.descriptionRow': 'Mô tả chi tiết',
+  'pdp.ingredientsCount': '{n} thành phần',
   // Thành phần mở sẵn 3 dòng.
   'pdp.ingredients': 'Thành phần',
-  'pdp.ingredientsMore': 'Xem đủ ({n})',
-  'pdp.ingredientsLess': 'Thu gọn',
   // So với món tương tự (cờ catalog.pdp_compare_enabled): bảng 3 cột.
   'pdp.compareTitle': 'So với món tương tự',
   'pdp.compareThis': 'Món này',
@@ -394,6 +406,9 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.brandShelfLabel': 'Cùng thương hiệu {brand}',
   'pdp.offerCount': '{n} mã giảm giá',
   'cart.saving': 'Tiết kiệm {x}',
+  // Chân dính gọn của giỏ (w47-01): các dòng giảm giá và phí giao ước tính nằm trong phần mở thêm dưới tổng tiền.
+  'cart.breakdownShow': 'Xem chi tiết tính tiền',
+  'cart.breakdownHide': 'Ẩn chi tiết tính tiền',
   'cart.subtotal': 'Tạm tính',
   'cart.subtotalNet': 'Tạm tính (đã giảm)',
   // Phí giao ước tính ngay ở giỏ (GET /checkout/shipping-estimate), dưới Tạm tính; giá trị "Miễn phí" ngắn để không lặp câu của thanh Miễn phí giao hàng.
@@ -450,6 +465,16 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.pointsNone': 'Tích điểm từ đơn đầu tiên nhé',
   // Dòng chú thích trong ô Điểm Xanh màn thanh toán (W43): phần điểm từ đơn sàn trong số đang đề nghị, n đã nhóm nghìn.
   'checkout.pointsOrderOnly': 'Gồm {n} điểm từ đơn sàn, giảm ngay',
+  // Hàng Điểm Xanh một dòng có công tắc (w47-01); các lưu ý trần/đối tác/quy đổi nằm trong tấm "Cách dùng Điểm Xanh".
+  'checkout.pointsToggle': 'Dùng {n} Điểm Xanh (-{amount})',
+  'checkout.pointsToggleNoAmount': 'Dùng {n} Điểm Xanh',
+  'checkout.pointsTitle': 'Điểm Xanh',
+  'checkout.pointsInfo': 'Cách dùng Điểm Xanh',
+  'checkout.pointsInfoDone': 'Đã hiểu',
+  'checkout.pointsInfoBody': 'Mỗi điểm giảm {rate} tiền hàng. Số điểm dùng được tuỳ giá trị đơn, Tubu tính lại khi bạn đổi giỏ hay địa chỉ.',
+  // Một dòng đồng ý điều khoản cạnh nút Đặt hàng; chạm mở tấm năm chính sách.
+  'checkout.consentLine': 'Đặt đơn nghĩa là bạn đồng ý Điều khoản & Chính sách',
+  'checkout.consentSheet': 'Điều khoản & Chính sách',
   'checkout.addressEmpty': 'Bạn chưa thêm địa chỉ',
   // Khối địa chỉ gọn một dòng + tấm chọn địa chỉ đã lưu (wave tubu-w2-06)
   'checkout.addressChange': 'Đổi',
@@ -732,6 +757,7 @@ export const SHOP_COPY: Record<string, string> = {
   'freeship.barAria': 'Đã đạt {pct}% để được Miễn phí giao hàng',
   'freeship.addonsTitle': 'Gợi ý mua thêm cho đủ Miễn phí giao hàng',
   'freeship.boosterTitle': 'Thêm 1 món nhỏ để đủ Miễn phí giao hàng',
+  'freeship.boosterToggle': 'Gợi ý thêm để được Miễn phí giao hàng',
   // Dòng đầu dải gợi ý mua thêm ở Giỏ khi đã Miễn phí giao hàng (tubu-w7-02, `aovUpsellGoal`): số còn thiếu tới quà dùng thử 0đ. Có hàng gian hàng tự giao thì nói rõ chỉ hàng Tubu Tree giao được tính.
   'aov.giftLine': 'Thêm {amount} nữa để nhận quà dùng thử 0đ',
   'aov.giftLineTubu': 'Thêm {amount} hàng Tubu Tree giao để nhận quà dùng thử 0đ',

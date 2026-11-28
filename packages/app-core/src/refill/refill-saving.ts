@@ -67,6 +67,8 @@ export interface PdpRefillOfferView {
   /** Nhãn đọc của nút "+ Thêm" (bắt đầu bằng chữ nhìn thấy, WCAG 2.5.3). */
   addAria: string;
   comparison: RefillValueComparison | null;
+  /** Túi hay can (theo tên gói): nhãn nút của dải chọn cách mua. Thẻ dựng tay ở spec cũ không có thì coi là túi. */
+  pack?: 'túi' | 'can';
 }
 
 const CAN = /(^|[^\p{L}])can(?![\p{L}])/iu;
@@ -102,6 +104,7 @@ export function pdpRefillOffer(
     meta: comparison && comparison.bottlesReplaced >= 1 ? refillSavingCopy('offerMeta', { n: comparison.bottlesReplaced, price }) : price,
     addAria: fillCopy('freeship.addAria', { name: offer.name, price }),
     comparison,
+    pack,
   };
 }
 

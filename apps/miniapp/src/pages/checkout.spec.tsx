@@ -153,6 +153,17 @@ function paymentBox(): HTMLElement {
   return screen.getByText('Phương thức thanh toán').parentElement as HTMLElement;
 }
 
+/** Công tắc của hàng Điểm Xanh, tên đọc là chính câu "Dùng N Điểm Xanh (-Xđ)". */
+function pointsSwitch(name: string | RegExp = /^Dùng [\d.]+ Điểm Xanh/) {
+  return screen.findByRole('switch', { name });
+}
+
+/** Mở tấm ⓘ "Cách dùng Điểm Xanh" (lưu ý trần, hàng đối tác, điểm quy đổi, điểm đang giữ, điểm từ đơn sàn). */
+async function openPointsInfo(): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: 'Cách dùng Điểm Xanh' }));
+  return screen.findByTestId('checkout-points-info');
+}
+
 async function placeOrderClick() {
   const btn = await screen.findByText(/(Đặt hàng|Thử lại) · /);
   await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
@@ -227,23 +238,25 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     await waitFor(() => expect(JSON.parse(localStorage.getItem('tubu_home_todo_rows') ?? 'null')).toEqual({ userId: 'u1', rows: 1 }));
   });
 
-  it('dòng đồng ý điều khoản nằm trong nội dung trang ngay trên thanh Đặt hàng (không làm thanh cao thêm), năm link mở popup chính sách trong app, không có ô tick', async () => {
+  it('dòng đồng ý điều khoản: một dòng ngay trên thanh Đặt hàng (không làm thanh cao thêm), mở tấm năm chính sách, mỗi mục mở popup chính sách trong app, không có ô tick', async () => {
     renderPage();
     const line = await screen.findByTestId('order-consent');
-    expect(line.textContent).toBe('Bằng việc đặt hàng, bạn đồng ý với: Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán.');
+    expect(line.textContent).toBe('Đặt đơn nghĩa là bạn đồng ý Điều khoản & Chính sách');
     expect(screen.getByTestId('sticky-bar')).not.toContainElement(line);
     expect(line.compareDocumentPosition(screen.getByTestId('sticky-bar')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(line).queryByRole('checkbox')).toBeNull();
-    fireEvent.click(within(line).getByRole('button', { name: 'Điều khoản' }));
-    expect(screen.getByTestId('policy-sheet')).toHaveTextContent('dieu-khoan');
-    fireEvent.click(within(line).getByRole('button', { name: 'Chính sách đổi trả' }));
-    expect(screen.getByTestId('policy-sheet')).toHaveTextContent('doi-tra');
+    expect(screen.queryByRole('checkbox', { name: /Điều khoản/ })).toBeNull();
+    expect(screen.queryByTestId('order-consent-policies')).toBeNull();
     for (const [name, slug] of [
+      ['Điều khoản sử dụng', 'dieu-khoan'],
       ['Chính sách bảo mật', 'bao-mat'],
+      ['Chính sách đổi trả', 'doi-tra'],
       ['Chính sách vận chuyển', 'van-chuyen'],
-      ['Chính sách thanh toán', 'thanh-toan'],
+      ['Chính sách và hình thức thanh toán', 'thanh-toan'],
     ]) {
-      fireEvent.click(within(line).getByRole('button', { name }));
+      fireEvent.click(line);
+      const sheet = await screen.findByTestId('order-consent-policies');
+      expect(within(sheet).getAllByRole('button')).toHaveLength(5);
+      fireEvent.click(within(sheet).getByRole('button', { name }));
       expect(screen.getByTestId('policy-sheet')).toHaveTextContent(slug!);
     }
   });
@@ -503,21 +516,32 @@ describe('CheckoutPage — Ví bị mờ phải nói lý do, số điểm có d�
     expect(screen.queryByText(/Số dư chưa đủ/)).not.toBeInTheDocument();
   });
 
-  it('Điểm Xanh: "Dùng 48 điểm, giảm 48đ" thay vì "48/65000"', async () => {
+  it('Điểm Xanh: một dòng "Dùng 48 Điểm Xanh (-48đ)" thay vì "48/65000"; phần đang giữ nằm trong tấm ⓘ', async () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 65_000, lockedPoints: 64_952, redeemablePoints: 48 });
     renderPage();
-    expect(await screen.findByText('Dùng 48 điểm, giảm 48đ')).toBeInTheDocument();
-    expect(screen.getByText(/^64\.952 điểm từ đơn còn trong hạn/)).toBeInTheDocument();
+    expect(await pointsSwitch('Dùng 48 Điểm Xanh (-48đ)')).not.toBeChecked();
+    expect(screen.queryByText(/^64\.952 điểm từ đơn còn trong hạn/)).toBeNull();
+    const info = await openPointsInfo();
+    expect(within(info).getByText(/^64\.952 điểm từ đơn còn trong hạn/)).toHaveAttribute('data-points-note', 'lock');
   });
 
-  it('bật dùng điểm: "Dùng 1.250 điểm, giảm 12.500đ"', async () => {
+  it('bật dùng điểm: "Dùng 1.250 Điểm Xanh (-12.500đ)" theo số báo giá trừ', async () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 1250, lockedPoints: 0, redeemablePoints: 1250 });
     mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) => ({
       ...BIG_QUOTE, pointsUsed: pts, pointsDiscount: pts * 10, total: 798_000 - pts * 10,
     }));
     renderPage();
-    fireEvent.click(await screen.findByText('Dùng 1.250 điểm, giảm 1.250đ'));
-    expect(await screen.findByText('Dùng 1.250 điểm, giảm 12.500đ')).toBeInTheDocument();
+    fireEvent.click(await pointsSwitch('Dùng 1.250 Điểm Xanh (-1.250đ)'));
+    expect(await pointsSwitch('Dùng 1.250 Điểm Xanh (-12.500đ)')).toBeChecked();
+  });
+
+  it('chưa có Điểm Xanh: không vẽ công tắc tắt giả, vẫn còn nút ⓘ', async () => {
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0, lockedPoints: 0, redeemablePoints: 0 });
+    renderPage();
+    const row = await screen.findByTestId('checkout-points');
+    expect(within(row).queryByRole('switch')).toBeNull();
+    expect(within(row).queryByRole('checkbox')).toBeNull();
+    expect(within(row).getByRole('button', { name: 'Cách dùng Điểm Xanh' })).toBeInTheDocument();
   });
 
   it('điểm sẽ tích ≥ 1.000 có dấu nghìn ở thanh tóm tắt', async () => {
@@ -555,11 +579,11 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
       ...BIG_QUOTE, pointsUsed: pts, pointsUsedConverted: pts, pointsDiscount: pts * 1_000, total: 520_000 - pts * 1_000,
     }));
     renderPage();
-    expect(await screen.findByText('Dùng 1.000 điểm, giảm 1.000đ')).toBeInTheDocument();
-    expect(screen.getByText('trong đó 1.000 điểm không hết hạn, trả tới 100% giá trị hàng')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Dùng 1.000 điểm, giảm 1.000đ'));
+    const toggle = await pointsSwitch('Dùng 1.000 Điểm Xanh (-1.000đ)');
+    expect(within(await openPointsInfo()).getByText('trong đó 1.000 điểm không hết hạn, trả tới 100% giá trị hàng')).toBeInTheDocument();
+    fireEvent.click(toggle);
     await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 1_000, undefined, undefined, {}));
-    expect(await screen.findByText('Dùng 1.000 điểm, giảm 1.000.000đ')).toBeInTheDocument();
+    expect(await pointsSwitch('Dùng 1.000 Điểm Xanh (-1.000.000đ)')).toBeChecked();
   });
 
   it('lô thường bị khoá một phần + có lô quy đổi: pointsToUse = phần thường dùng được + toàn bộ lô quy đổi', async () => {
@@ -567,23 +591,22 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
       pointsBalance: 500, pointsConvertedBalance: 100, lockedPoints: 300, redeemablePoints: 200,
     });
     renderPage();
-    expect(await screen.findByText('Dùng 300 điểm, giảm 300đ')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Dùng 300 điểm, giảm 300đ'));
+    fireEvent.click(await pointsSwitch('Dùng 300 Điểm Xanh (-300đ)'));
     await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 300, undefined, undefined, {}));
   });
 
   it('không có điểm quy đổi: không hiện dòng "không hết hạn"', async () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 120, lockedPoints: 0, redeemablePoints: 120 });
     renderPage();
-    await screen.findByText('Dùng 120 điểm, giảm 120đ');
-    expect(screen.queryByText(/không hết hạn/)).toBeNull();
+    await pointsSwitch('Dùng 120 Điểm Xanh (-120đ)');
+    expect(within(await openPointsInfo()).queryByText(/không hết hạn/)).toBeNull();
   });
 
   it('chưa tải overview điểm: lấy lô thường + lô quy đổi từ hồ sơ đăng nhập', async () => {
     mocks.getLoyalty.mockReturnValue(new Promise(() => {}));
     Object.assign(mocks.user, { pointsBalance: 40, pointsConvertedBalance: 60 });
     renderPage();
-    expect(await screen.findByText('Dùng 100 điểm, giảm 100đ')).toBeInTheDocument();
+    expect(await pointsSwitch('Dùng 100 Điểm Xanh (-100đ)')).toBeInTheDocument();
     Object.assign(mocks.user, { pointsBalance: 0, pointsConvertedBalance: 0 });
   });
 
@@ -609,16 +632,15 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
           : { ...CAPPED, pointsUsed: 0, pointsUsedMarketplace: 0, pointsDiscount: 0 },
       );
       const { container } = renderPage();
-      const before = await screen.findByText(line('20.000'));
-      expect(before).toHaveAttribute('data-points-marketplace');
+      const toggle = await pointsSwitch();
+      const info = await openPointsInfo();
+      expect(within(info).getByText(line('20.000'))).toHaveAttribute('data-points-note', 'marketplace');
       expect(screen.queryByText(line('30.000'))).toBeNull();
-      const row = before.closest('[role="checkbox"]')!;
-      expect(row).not.toBeNull();
-      fireEvent.click(row);
+      fireEvent.click(toggle);
       await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 80_000, undefined, undefined, {}));
-      await waitFor(() => expect(row).toHaveAttribute('aria-checked', 'true'));
-      expect(await screen.findByText(line('20.000'))).toBeInTheDocument();
-      expect(container.querySelectorAll('[data-points-marketplace]')).toHaveLength(1);
+      await waitFor(() => expect(toggle).toBeChecked());
+      expect(await within(info).findByText(line('20.000'))).toBeInTheDocument();
+      expect(container.querySelectorAll('[data-points-note="marketplace"]')).toHaveLength(1);
     });
 
     it('API cũ chưa trả pointsMaxMarketplace: không đoán từ số dư lô sàn', async () => {
@@ -626,15 +648,15 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
       const { pointsMaxMarketplace: _omit, ...oldApi } = CAPPED;
       mocks.checkoutQuote.mockResolvedValue({ ...oldApi, pointsUsed: 0, pointsDiscount: 0 });
       renderPage();
-      await screen.findByText(/^Dùng [\d.]+ điểm, giảm/);
-      expect(screen.queryByText(/từ đơn sàn, giảm ngay/)).toBeNull();
+      await pointsSwitch();
+      expect(within(await openPointsInfo()).queryByText(/từ đơn sàn, giảm ngay/)).toBeNull();
     });
 
     it('không có lô sàn: không có dòng nhắc', async () => {
       mocks.getLoyalty.mockResolvedValue({ pointsBalance: 120, lockedPoints: 0, redeemablePoints: 120 });
       renderPage();
-      await screen.findByText('Dùng 120 điểm, giảm 120đ');
-      expect(screen.queryByText(/từ đơn sàn, giảm ngay/)).toBeNull();
+      await pointsSwitch('Dùng 120 Điểm Xanh (-120đ)');
+      expect(within(await openPointsInfo()).queryByText(/từ đơn sàn, giảm ngay/)).toBeNull();
     });
   });
 
@@ -645,7 +667,7 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
       mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0, pointsConvertedBalance: 50, redeemablePoints: 0 });
       mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) => (pts > 0 ? ZERO : QUOTE));
       renderPage();
-      fireEvent.click(await screen.findByText('Dùng 50 điểm, giảm 50đ'));
+      fireEvent.click(await pointsSwitch('Dùng 50 Điểm Xanh (-50đ)'));
       expect(await screen.findByText('Đơn đã được trả đủ bằng Điểm Xanh. Bạn không cần thanh toán thêm.')).toBeInTheDocument();
       expect(within(paymentBox()).queryAllByRole('radio')).toHaveLength(0);
     });
@@ -655,7 +677,7 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
       mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) => (pts > 0 ? ZERO : QUOTE));
       renderPage();
       fireEvent.click(await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
-      fireEvent.click(await screen.findByText('Dùng 50 điểm, giảm 50đ'));
+      fireEvent.click(await pointsSwitch('Dùng 50 Điểm Xanh (-50đ)'));
       await screen.findByText(/Đơn đã được trả đủ bằng Điểm Xanh/);
       const body = await placeOrderClick();
       expect(body.paymentMethod).toBe('COD');
@@ -666,7 +688,7 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
       mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0, pointsConvertedBalance: 50, redeemablePoints: 0 });
       mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) => (pts > 0 ? ZERO : QUOTE));
       renderPage();
-      fireEvent.click(await screen.findByText('Dùng 50 điểm, giảm 50đ'));
+      fireEvent.click(await pointsSwitch('Dùng 50 Điểm Xanh (-50đ)'));
       await screen.findByText(/Đơn đã được trả đủ bằng Điểm Xanh/);
       const body = await placeOrderClick();
       expect(body.paymentMethod).toBe('COD');
@@ -923,11 +945,12 @@ describe('CheckoutPage — thiếu địa chỉ: nút Đặt hàng khoá có lý
     expect(screen.getAllByText('50.000đ').length).toBeGreaterThan(0); // Tạm tính vẫn là tiền hàng
   });
 
-  it('sheet "Chi tiết tính tiền": "Tổng thanh toán" cũng ghi "Chưa tính"', async () => {
+  it('khối tóm tắt không còn nút "Chi tiết" mở tấm tính tiền trùng lặp (w47-01): mọi dòng tiền nằm ngay trong khối', async () => {
     renderPage();
-    fireEvent.click(await screen.findByText('Chi tiết'));
-    const label = await screen.findByText('Tổng thanh toán');
-    expect(label.parentElement!.textContent).toBe('Tổng thanh toánChưa tính');
+    const summary = await screen.findByTestId('checkout-summary');
+    expect(within(summary).queryByRole('button', { name: /Chi tiết/ })).toBeNull();
+    expect(screen.queryByText('Chi tiết tính tiền đơn hàng')).toBeNull();
+    expect(within(summary).getAllByText('Chưa tính').length).toBeGreaterThan(0);
   });
 
   it('báo giá lỗi (đã có địa chỉ): lý do khác, nút khoá, không hiện số cũ', async () => {
@@ -1064,10 +1087,12 @@ describe('CheckoutPage — hàng chọn không chứa phần tử focus được
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
   });
 
-  it('phương thức thanh toán, Điểm Xanh, hoá đơn VAT: mỗi hàng role radio/checkbox là điều khiển duy nhất, chấm chọn bên trong không focus được', async () => {
+  it('phương thức thanh toán, Điểm Xanh, hoá đơn VAT: mỗi hàng role radio/checkbox/switch là điều khiển duy nhất, chấm chọn bên trong không focus được', async () => {
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 120, lockedPoints: 0, redeemablePoints: 120 });
     const { container } = renderPage();
     await screen.findByText('Phương thức thanh toán');
-    const rows = container.querySelectorAll('[role="radio"], [role="checkbox"]');
+    await pointsSwitch();
+    const rows = container.querySelectorAll('[role="radio"], [role="checkbox"], [role="switch"]');
     expect(rows.length).toBeGreaterThanOrEqual(4);
     expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
   });
@@ -1581,20 +1606,19 @@ describe('CheckoutPage — Điểm Xanh chỉ dùng cho hàng Tubu (Q8 S7)', () 
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 300, redeemablePoints: 300 });
   });
 
-  const pointsRow = async () => (await screen.findByText('Điểm Xanh', { selector: 'span, div, p' })).closest('[role="checkbox"]') as HTMLElement;
-
-  it('giỏ có hàng của gian hàng đối tác: nêu trần điểm của đơn và câu giải thích, vẫn bật được', async () => {
+  it('giỏ có hàng của gian hàng đối tác: tấm ⓘ nêu trần điểm của đơn và câu giải thích, công tắc vẫn bật được', async () => {
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 12, pointsPartnerNote: NOTE });
     renderPage();
-    expect(await screen.findByText('Đơn này dùng tối đa 12 Điểm Xanh')).toBeInTheDocument();
-    expect(screen.getByText(NOTE)).toBeInTheDocument();
-    const row = await pointsRow();
-    expect(row.getAttribute('aria-disabled')).toBe('false');
-    fireEvent.click(row);
+    const toggle = await pointsSwitch('Dùng 12 Điểm Xanh (-12đ)');
+    const info = await openPointsInfo();
+    expect(within(info).getByText('Đơn này dùng tối đa 12 Điểm Xanh')).toHaveAttribute('data-points-note', 'cap');
+    expect(within(info).getByText(NOTE)).toHaveAttribute('data-points-note', 'partner');
+    expect(toggle).not.toBeDisabled();
+    fireEvent.click(toggle);
     await waitFor(() => expect(mocks.checkoutQuote.mock.calls.some((c) => c[1] === 300)).toBe(true));
   });
 
-  it('R4-BUYER-2: giỏ chỉ hàng Tubu, trần của đơn thấp hơn số dư: nêu trần ngay khi chưa tick, tick xong ra đúng số thật', async () => {
+  it('R4-BUYER-2: giỏ chỉ hàng Tubu, trần của đơn thấp hơn số dư: câu chưa bật đã kẹp theo trần, bật xong ra đúng số thật', async () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 8013, redeemablePoints: 7972 });
     mocks.checkoutQuote.mockImplementation(async (_addr: string, pointsToUse: number) => ({
       ...QUOTE,
@@ -1606,45 +1630,49 @@ describe('CheckoutPage — Điểm Xanh chỉ dùng cho hàng Tubu (Q8 S7)', () 
       pointsDiscount: pointsToUse > 0 ? 42_000 : 0,
     }));
     renderPage();
-    expect(await screen.findByText('Đơn này dùng tối đa 42 Điểm Xanh, tính theo giá trị hàng của đơn')).toBeInTheDocument();
-    expect(screen.getByText(/Dùng 42 điểm, giảm 42đ/)).toBeInTheDocument();
-    fireEvent.click(await pointsRow());
-    expect(await screen.findByText('Dùng 42 điểm, giảm 42.000đ')).toBeInTheDocument();
+    const toggle = await pointsSwitch('Dùng 42 Điểm Xanh (-42đ)');
+    expect(within(await openPointsInfo()).getByText('Đơn này dùng tối đa 42 Điểm Xanh, tính theo giá trị hàng của đơn')).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(await pointsSwitch('Dùng 42 Điểm Xanh (-42.000đ)')).toBeChecked();
   });
 
   it('R4-BUYER-2: có điểm quy đổi mà đơn bị trần: vẫn nói phần không hết hạn nhưng không hứa "trả tới 100% giá trị hàng"', async () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0, pointsConvertedBalance: 1_000, lockedPoints: 0, redeemablePoints: 0 });
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 1_000, redeemablePoints: 0, pointsMax: 42, pointsPartnerNote: null });
     renderPage();
-    expect(await screen.findByText('Đơn này dùng tối đa 42 Điểm Xanh, tính theo giá trị hàng của đơn')).toBeInTheDocument();
-    expect(screen.getByText('trong đó 1.000 điểm không hết hạn')).toBeInTheDocument();
+    await pointsSwitch('Dùng 42 Điểm Xanh (-42đ)');
+    const info = await openPointsInfo();
+    expect(within(info).getByText('Đơn này dùng tối đa 42 Điểm Xanh, tính theo giá trị hàng của đơn')).toBeInTheDocument();
+    expect(within(info).getByText('trong đó 1.000 điểm không hết hạn')).toBeInTheDocument();
     expect(screen.queryByText(/trả tới 100%/)).toBeNull();
   });
 
   it('R4-BUYER-2: trần của đơn không thấp hơn số điểm dùng được thì không thêm dòng trần', async () => {
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 300, pointsPartnerNote: null });
     renderPage();
-    expect(await screen.findByText('Dùng 300 điểm, giảm 300đ')).toBeInTheDocument();
+    await pointsSwitch('Dùng 300 Điểm Xanh (-300đ)');
     await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalled());
-    expect(screen.queryByText(/Đơn này dùng tối đa/)).toBeNull();
+    expect(within(await openPointsInfo()).queryByText(/Đơn này dùng tối đa/)).toBeNull();
   });
 
-  it('đơn đối tác khoá điểm: ô ghi tổng điểm đang có, không ghi "Dùng được"', async () => {
+  it('đơn đối tác khoá điểm: hàng ghi tổng điểm đang có, không ghi "Dùng được"; câu giải thích là dòng phụ ngay dưới, tấm ⓘ không lặp', async () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 500, redeemablePoints: 300 });
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 500, redeemablePoints: 300, pointsMax: 0, pointsPartnerNote: NOTE });
     renderPage();
-    expect(await screen.findByText(NOTE)).toBeInTheDocument();
-    expect(await screen.findByText(/Bạn đang có 500 điểm/)).toBeInTheDocument();
+    const row = await screen.findByTestId('checkout-points');
+    expect(await within(row).findByText(/Bạn đang có 500 điểm/)).toBeInTheDocument();
     expect(screen.queryByText(/Dùng được/)).toBeNull();
+    expect(row.querySelector('[data-points-reason="partner"]')).toHaveTextContent(NOTE);
+    expect(within(await openPointsInfo()).queryByText(NOTE)).toBeNull();
   });
 
-  it('giỏ chỉ hàng của gian hàng đối tác: ô Điểm Xanh bị tắt, kèm câu giải thích, không gửi điểm', async () => {
+  it('giỏ chỉ hàng của gian hàng đối tác: hàng Điểm Xanh không có công tắc, không gửi điểm', async () => {
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 0, pointsPartnerNote: NOTE });
     renderPage();
-    expect(await screen.findByText(NOTE)).toBeInTheDocument();
-    const row = await pointsRow();
-    expect(row.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.click(row);
+    const row = await screen.findByTestId('checkout-points');
+    await within(row).findByText(/Bạn đang có 300 điểm/);
+    expect(within(row).queryByRole('switch')).toBeNull();
+    expect(within(row).getByText(NOTE)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 20));
     expect(mocks.checkoutQuote.mock.calls.every((c) => c[1] === 0)).toBe(true);
   });

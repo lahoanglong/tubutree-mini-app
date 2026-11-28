@@ -453,7 +453,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
           )}
           {zaloPhone && <OrderZaloConsentRow phone={zaloPhone} checked={zaloChecked === true} onChange={setZaloPicked} />}
           <div className="hidden lg:block">
-            <OrderConsent className="mt-3" />
+            <OrderConsent />
             {placeButton(`${ui.btnPrimary} mt-3 w-full tabular-nums`)}
           </div>
           <p role="status" className={hint ? 'mt-2 hidden text-caption text-[color:var(--color-text-secondary)] lg:block' : 'sr-only'}>
@@ -475,7 +475,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
               </span>
             </div>
           )}
-          <OrderConsent className="pt-3 lg:hidden" />
+          <OrderConsent className="lg:hidden" />
         </div>
       </div>
 

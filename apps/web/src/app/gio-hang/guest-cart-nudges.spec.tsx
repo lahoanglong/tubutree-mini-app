@@ -58,7 +58,12 @@ const mount = async (ui: Parameters<typeof render>[0]) => {
   await flush(6);
   return r.container;
 };
-const firstAdd = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button')!;
+const firstAdd = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-testid="freeship-add"]')!;
+/** Dải gập sẵn (w47-01): mở dòng "Gợi ý thêm để được Miễn phí giao hàng ▾" rồi mới thấy nút "+ Thêm". */
+const openRail = (c: HTMLElement) => {
+  const toggle = c.querySelector<HTMLButtonElement>('[data-testid="freeship-addons-toggle"]')!;
+  if (toggle.getAttribute('aria-expanded') !== 'true') click(toggle);
+};
 
 describe('GuestFreeshipAddonsView: dải mua thêm của giỏ khách', () => {
   beforeEach(() => {
@@ -71,7 +76,9 @@ describe('GuestFreeshipAddonsView: dải mua thêm của giỏ khách', () => {
 
   it('"+ Thêm" ghi đúng phân loại, số lượng 1 vào giỏ khách trong máy, không lời lỗi', async () => {
     const c = await mount(<GuestFreeshipAddonsView goal={GOAL} lines={LINES} source={source} pricing={pricing} guest />);
-    expect(c.textContent).toContain('Mua thêm 60.000đ để được Miễn phí giao hàng');
+    expect(c.querySelector('[data-testid="freeship-addons"]')!.getAttribute('aria-label')).toContain('Mua thêm 60.000đ để được Miễn phí giao hàng');
+    expect(c.querySelector('[data-testid="freeship-addons-toggle"]')!.textContent).toBe('Gợi ý thêm để được Miễn phí giao hàng');
+    openRail(c);
     click(firstAdd(c));
     expect(state.addCalls).toEqual([{ variationId: 'v-khan-tre', slug: 'khan-tre', quantity: 1 }]);
     expect(c.querySelector('[role="alert"]')).toBeNull();
@@ -79,6 +86,7 @@ describe('GuestFreeshipAddonsView: dải mua thêm của giỏ khách', () => {
 
   it('giỏ khách đầy / phân loại đã tới trần: báo đúng câu của nút "Thêm vào giỏ"', async () => {
     const c = await mount(<GuestFreeshipAddonsView goal={GOAL} lines={LINES} source={source} pricing={pricing} guest />);
+    openRail(c);
     state.addResult = { ok: false, reason: 'full' };
     click(firstAdd(c));
     expect(c.querySelector('[role="alert"]')?.textContent).toBe(fillCopy('guestCart.full', { n: GUEST_CART_MAX_LINES }));

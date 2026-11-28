@@ -2,10 +2,12 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { AlertCircle, Check, ChevronRight, MapPin } from 'lucide-react';
+import { AlertCircle, ChevronRight, MapPin } from 'lucide-react';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchCatalog, fetchCategories, fetchRelated } from '@tubutree/app-core/api/catalog';
 import { pdpCategoryLinks, pdpCategoryTrail, pdpGeneratedFaq, pdpRefillLink } from '@tubutree/app-core/commerce/pdp-link-hub';
+import { pdpDescriptionLead } from '@tubutree/app-core/commerce/pdp-highlights';
 import { fetchProductCompare } from '@tubutree/app-core/api/product-compare';
 import { fetchRefillPair, pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 import { addonRows, comboView } from '@tubutree/app-core/commerce/bundle-view';
@@ -36,24 +38,24 @@ import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
 import { RecordRecentlyViewed } from './record-recently-viewed';
 import { ProductViewTracker } from './product-view-tracker';
-import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold } from './pdp-extras';
+import { PdpBuyModeStrip } from './pdp-buy-mode-strip';
+import { PdpHighlightsBlock } from './pdp-highlights-block';
 import { PdpAddOns, PdpAddOnScope } from './pdp-addons';
 import { PdpBundles } from './pdp-bundles';
 import { compareRows } from './compare-view';
 import { PdpCompare } from './pdp-compare';
 import { PdpRails } from './pdp-rails';
 import { PdpRebuyRow } from './pdp-rebuy';
-import { PdpRefillOfferBlock } from './pdp-refill-offer';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
 import { PdpLinkHub } from './pdp-link-hub';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating, PdpRefillLandingLink } from './pdp-sections';
 import { PdpStory } from './pdp-story';
 import { PdpOriginGuide } from './pdp-origin-guide';
 import { pdpOriginView } from '@tubutree/app-core/commerce/pdp-origin';
-import { PdpEco } from '@/components/eco/pdp-eco';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { phoneBand, phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
+import { phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
 
 export const revalidate = 300;
 const FLASH_REVALIDATE_S = 60;
@@ -165,6 +167,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const showShortDesc = !!shortDesc && shortDesc !== description;
   const hasIngredients = (product.ingredients ?? []).length > 0;
   const hasDescription = parseRichText(product.description).length > 0;
+  const descriptionLead = pdpDescriptionLead(showShortDesc ? shortDesc : null);
+  const hasDetails = hasIngredients || hasDescription || descriptionLead !== null || originView !== null;
   const hasCompare = compareRows(compare) !== null;
   // Hỏi–đáp chỉ từ chữ đang có trên trang: Thành phần, dòng Cách dùng của khối Nguồn gốc & cách dùng, thẻ gói Refill. Gian hàng chưa nhận đơn thì
   // thẻ gói Refill không vẽ, nên câu hỏi và liên kết Refill cũng không có (không nêu số tiết kiệm mà trang không hiện).
@@ -206,8 +210,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         {/*
           Thứ tự khối theo `PDP_BLOCK_ORDER` (app-core, chung với Mini App), mỗi gốc khối có `data-pdp-block`; khối không có dữ liệu thì không có phần tử.
           Thứ tự HTML là thứ tự nhìn ở điện thoại và thứ tự Tab/TalkBack ở mọi khổ: cột thông tin không còn xếp lại bằng `order`, nên nút "Thêm vào giỏ"
-          ở máy tính đứng ngay sau giá. Từ lg phần dưới là lưới hai cột xếp dày (`grid-flow-row-dense`): Mô tả lấp ô cạnh Thành phần, Đánh giá cạnh So sánh,
-          còn câu chuyện, mua kèm, cam kết và các dải gợi ý chiếm cả hàng; vì vậy ở lg thứ tự nhìn của Câu chuyện và Mô tả đảo nhau so với HTML (chấp nhận).
+          ở máy tính đứng ngay sau giá. Từ lg phần dưới là lưới hai cột xếp dày (`grid-flow-row-dense`): Đánh giá cạnh So sánh, còn dải Chi tiết sản phẩm,
+          câu chuyện, mua kèm, cam kết và các dải gợi ý chiếm cả hàng.
         */}
         <PdpLayout
           gallery={
@@ -283,12 +287,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
 
-              {/* "Bạn đã mua · Mua lại" đứng trước "Đặt định kỳ" (lối phụ); cả hai rỗng thì dải không chiếm chỗ. */}
-              <div data-section="pdp-subscribe" className={`${phoneBandPad} max-md:pb-4 empty:hidden`}>
+              {/* Dòng nhỏ "Bạn đã mua · Mua lại" rồi MỘT dải chọn cách mua (Mua lẻ / Túi Refill / Định kỳ), nối liền dải phân loại như Mini App; cả hai rỗng thì
+                  không chiếm chỗ. Từ md hai dòng thẳng lề với cột thông tin (bỏ đệm ngang của dải điện thoại). */}
+              <div data-section="pdp-subscribe" className="empty:hidden md:mt-3 md:[&>.tubu-buy-modes]:px-0 md:[&>.tubu-rebuy]:px-0">
                 <PdpRebuyRow productId={product.id} slug={product.slug} productName={product.name} variations={product.variations} blocked={!!unavailableText} />
-                {refillOffer && !unavailableText && <PdpRefillOfferBlock view={refillOffer} />}
-                {refillOffer && !unavailableText && <PdpRefillLandingLink entry={refillEntryLink()} />}
-                {!retailOnly && <PdpSubscribeRow slug={product.slug} variations={product.variations} initialConfig={publicConfig} />}
+                <PdpBuyModeStrip
+                  slug={product.slug}
+                  variations={product.variations}
+                  initialConfig={publicConfig}
+                  refill={shownRefill}
+                  retailOnly={retailOnly}
+                  refillExtra={shownRefill ? <PdpRefillLandingLink entry={refillEntryLink()} /> : null}
+                />
               </div>
 
               <div data-pdp-block="shipping" className="mt-3 max-md:mt-2">
@@ -331,46 +341,35 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 )}
               </div>
 
-              {(showShortDesc || product.certifications.length > 0) && (
-                <div data-pdp-block="benefits" className={`mt-3 ${phoneBand}`}>
-                  {showShortDesc && (
-                    <p data-testid="pdp-short-desc" className="whitespace-pre-line break-words text-stone-600 max-md:text-sm max-md:text-[var(--color-text-secondary)]">
-                      {shortDesc}
-                    </p>
-                  )}
-                  {product.certifications.length > 0 && (
-                    <div data-testid="pdp-certs" data-section="pdp-certs" className={`flex flex-wrap gap-2 ${showShortDesc ? 'mt-3' : ''}`}>
-                      {product.certifications.map((c) => (
-                        <span
-                          key={c}
-                          className="flex items-center gap-1 rounded-control border border-forest-200 bg-forest-50 px-2.5 py-1 text-xs font-medium text-forest-800 max-md:rounded-full max-md:border-0 max-md:bg-[var(--color-bg-subtle)] max-md:text-[var(--color-text-brand)]"
-                        >
-                          <Check className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
-                          <span>{c}</span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <PdpEco facts={(product as { ecoFacts?: unknown }).ecoFacts} productSlug={product.slug} />
+              {/* Điểm nổi bật: tối đa 3 dòng gộp mô tả ngắn, Điểm cộng xanh, chứng nhận (`pdpHighlights`). */}
+              <div className="empty:hidden md:[&>.tubu-highlights]:px-0">
+                <PdpHighlightsBlock
+                  benefit={showShortDesc ? shortDesc : null}
+                  certifications={product.certifications}
+                  ecoFacts={(product as { ecoFacts?: unknown }).ecoFacts}
+                  productSlug={product.slug}
+                />
+              </div>
             </div>
           }
           below={
             // Gốc khối nằm trong khung lưới `empty:hidden`: khối tự ẩn (trả null) thì ô lưới cũng không chiếm chỗ.
             <div data-testid="pdp-below-cols" className="min-w-0 lg:grid lg:grid-flow-row-dense lg:grid-cols-2 lg:items-start lg:gap-x-8">
-              <div className={`min-w-0 empty:hidden ${hasDescription ? '' : 'lg:col-span-2'}`}>
-                <PdpIngredients ingredients={product.ingredients} />
-              </div>
-              {/* Gập sẵn một dòng, cả hàng ở lg: lưới xếp dày nên Mô tả vẫn lấp ô cạnh Thành phần ở hàng trên. */}
-              <div className="min-w-0 empty:hidden lg:col-span-2">
-                <PdpOriginGuide view={originView} />
-              </div>
+              {/* Chi tiết sản phẩm: Thành phần, Nguồn gốc & cách dùng, Mô tả chi tiết là các dòng gập sẵn trong một dải (cả hàng ở lg). */}
+              {hasDetails && (
+                <div className="min-w-0 md:mt-8 md:[&>.tubu-pdp-details]:px-0 lg:col-span-2">
+                  <section data-pdp-group="details" aria-labelledby="pdp-details-title" className="tubu-pdp-details">
+                    <h2 id="pdp-details-title" className="tubu-pdp-details-title">
+                      {fillCopy('pdp.details')}
+                    </h2>
+                    <PdpIngredients ingredients={product.ingredients} />
+                    <PdpOriginGuide view={originView} />
+                    <PdpDescription source={product.description} lead={descriptionLead} />
+                  </section>
+                </div>
+              )}
               <div className="min-w-0 empty:hidden lg:col-span-2">
                 <PdpStory product={product} />
-              </div>
-              <div className={`min-w-0 empty:hidden ${hasIngredients ? '' : 'lg:col-span-2'}`}>
-                <PdpDescription source={product.description} />
               </div>
               <div className="min-w-0 empty:hidden lg:col-span-2">
                 <PdpAddOns

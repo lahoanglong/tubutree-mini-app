@@ -24,6 +24,12 @@ describe('smallTouchTargets', () => {
     expect(check('<button class="tubu-hit-44">x</button>')).toHaveLength(1);
   });
 
+  it('lớp .tubu-* mà mini.css khai chiều cao ≥ 44px cũng đủ (jsdom không nạp CSS)', () => {
+    expect(check('<button class="tubu-consent-line tubu-press">Đặt đơn</button>')).toEqual([]);
+    expect(check('<button class="tubu-cart-total">Tổng</button>')).toEqual([]);
+    expect(check('<button class="tubu-press">x</button>')).toHaveLength(1);
+  });
+
   it('tubu-hit-44-square vẽ vùng chạm vuông 44px nên đủ một mình', () => {
     expect(check('<button class="tubu-hit-44-square h-9 w-9">+</button>')).toEqual([]);
   });

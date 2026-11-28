@@ -1,35 +1,9 @@
-import { Fragment, useMemo, useState, type CSSProperties } from 'react';
-import { ingredientsPreview } from '@tubutree/app-core/commerce/pdp-info';
-import { parseRichText, richTextPlain, type RichBlock, type RichInline } from '@tubutree/app-core/rich-text';
+import { Fragment, useMemo, type CSSProperties } from 'react';
+import { parseRichText, type RichBlock, type RichInline } from '@tubutree/app-core/rich-text';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { vi } from '../../i18n/vi';
-import { haptic } from '../../utils/haptic';
 import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import { SectionTitle } from '../ui/section-title';
 import { Text } from '../ui/text';
-
-const DESC_COLLAPSED_LINES = 4;
-const DESC_LONG_CHARS = 220;
-
-const SURFACE: CSSProperties = { marginTop: 'var(--space-stack-sm)', padding: 'var(--space-inset-page)', background: 'var(--color-bg-surface)' };
-
-/** Nút chữ "Xem thêm / Thu gọn" của một khối: Button ghost của DS (cao 44px), bỏ lề ngang để chữ thẳng mép nội dung. */
-function TextToggle({ expanded, more, less, onToggle }: { expanded: boolean; more: string; less: string; onToggle: () => void }) {
-  return (
-    <Button
-      variant="ghost"
-      aria-expanded={expanded}
-      onPress={() => {
-        haptic('light');
-        onToggle();
-      }}
-      style={{ minWidth: 0, paddingLeft: 0, paddingRight: 0, marginTop: 'var(--space-stack-xs)' }}
-    >
-      {expanded ? less : more}
-    </Button>
-  );
-}
+import { PdpDetailRow } from './pdp-detail-row';
 
 export interface PdpIngredient {
   name: string;
@@ -47,17 +21,13 @@ const DOT: CSSProperties = {
   background: 'var(--color-text-brand)',
 };
 
-/** Thành phần: mở sẵn vài dòng đầu (`ingredientsPreview`), danh sách dài thì có nút xem đủ. */
+/** Dòng "Thành phần" của dải Chi tiết sản phẩm: gập sẵn, chữ phụ là số thành phần; mở ra là đủ danh sách. */
 export function PdpIngredients({ items }: { items: readonly PdpIngredient[] }) {
-  const [expanded, setExpanded] = useState(false);
   if (items.length === 0) return null;
-  const { shown, hidden } = ingredientsPreview(items, expanded);
-  const canToggle = expanded || hidden > 0;
   return (
-    <section data-pdp-block="ingredients" aria-label={fillCopy('pdp.ingredients')} style={SURFACE}>
-      <SectionTitle block>{fillCopy('pdp.ingredients')}</SectionTitle>
-      <ul role="list" style={{ listStyle: 'none', margin: 'var(--space-stack-sm) 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
-        {shown.map((ing, i) => (
+    <PdpDetailRow block="ingredients" title={fillCopy('pdp.ingredients')} hint={fillCopy('pdp.ingredientsCount', { n: items.length })}>
+      <ul role="list" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
+        {items.map((ing, i) => (
           <li key={i} style={{ display: 'flex', gap: 'var(--space-inline-sm)' }}>
             <span aria-hidden="true" style={DOT} />
             <div style={{ flex: '1 1 auto', minWidth: 0 }}>
@@ -80,15 +50,7 @@ export function PdpIngredients({ items }: { items: readonly PdpIngredient[] }) {
           </li>
         ))}
       </ul>
-      {canToggle && (
-        <TextToggle
-          expanded={expanded}
-          more={fillCopy('pdp.ingredientsMore', { n: items.length })}
-          less={fillCopy('pdp.ingredientsLess')}
-          onToggle={() => setExpanded((e) => !e)}
-        />
-      )}
-    </section>
+    </PdpDetailRow>
   );
 }
 
@@ -138,35 +100,19 @@ function RichTextView({ blocks }: { blocks: readonly RichBlock[] }) {
   );
 }
 
-const DESC_BODY: CSSProperties = {
-  marginTop: 'var(--space-stack-xs)',
-  fontFamily: 'var(--font-ui)',
-  fontSize: 'var(--type-body-sm-size)',
-  lineHeight: 'var(--type-body-sm-lh)',
-  color: 'var(--color-text-secondary)',
-  whiteSpace: 'pre-line',
-  overflowWrap: 'anywhere',
-};
-const DESC_CLAMP: CSSProperties = { display: '-webkit-box', WebkitLineClamp: DESC_COLLAPSED_LINES, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
-
 /**
- * Mô tả sản phẩm: chuỗi từ Pancake/WordPress có thể là HTML; đọc qua `parseRichText` rồi vẽ như chữ nên không bao giờ hiện thẻ dạng chữ.
- * Dài (theo chữ thường `richTextPlain`, tính cả số dòng) thì thu gọn 4 dòng kèm nút Xem thêm.
+ * Dòng "Mô tả chi tiết" của dải Chi tiết sản phẩm: chuỗi từ Pancake/WordPress có thể là HTML; đọc qua `parseRichText` rồi vẽ như chữ nên không bao giờ hiện thẻ
+ * dạng chữ. Gập sẵn; mở ra là đủ mô tả (không còn thu gọn 4 dòng bên trong).
  */
-export function PdpDescription({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const blocks = useMemo(() => parseRichText(text), [text]);
-  const plain = useMemo(() => richTextPlain(blocks), [blocks]);
+export function PdpDescription({ text, lead }: { text: string | null | undefined; lead?: string | null }) {
+  // `lead`: mô tả ngắn nhiều ý (`pdpDescriptionLead`), đoạn đầu để phần Điểm nổi bật cắt bớt vẫn đọc được đủ.
+  const blocks = useMemo<RichBlock[]>(() => [...(lead ? [{ kind: 'p' as const, inlines: [{ text: lead }] }] : []), ...parseRichText(text)], [lead, text]);
   if (blocks.length === 0) return null;
-  const lines = plain.split('\n').filter((l) => l.trim() !== '').length;
-  const isLong = plain.length > DESC_LONG_CHARS || lines > DESC_COLLAPSED_LINES;
   return (
-    <section data-pdp-block="description" aria-label={vi.product.description} style={SURFACE}>
-      <SectionTitle block>{vi.product.description}</SectionTitle>
-      <div data-testid="pdp-description-body" style={isLong && !expanded ? { ...DESC_BODY, ...DESC_CLAMP } : DESC_BODY}>
+    <PdpDetailRow block="description" title={fillCopy('pdp.descriptionRow')}>
+      <div data-testid="pdp-description-body" style={{ whiteSpace: 'pre-line' }}>
         <RichTextView blocks={blocks} />
       </div>
-      {isLong && <TextToggle expanded={expanded} more={vi.product.descriptionMore} less={vi.product.descriptionLess} onToggle={() => setExpanded((e) => !e)} />}
-    </section>
+    </PdpDetailRow>
   );
 }

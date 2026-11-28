@@ -84,8 +84,9 @@ describe('hàng role=radio/checkbox ở trang thanh toán có bàn phím', () =>
   const rows = [...src.matchAll(/role="(radio|checkbox)"/g)].map((m) => ({ role: m[1], tag: openingTagAround(src, m.index ?? 0) }));
 
   // Hàng đổi rác kèm đơn đã sang components/checkout/pickup-section.tsx dùng <button> thật và Checkbox có nhãn nên không cần rowKeyboardProps.
-  it('tìm thấy cả 3 hàng tự làm (phương thức thanh toán, Điểm Xanh, hoá đơn VAT)', () => {
-    expect(rows).toHaveLength(3);
+  // Dòng Điểm Xanh đã sang components/checkout/points-toggle-row.tsx: công tắc thật có tên (label bọc), không còn hàng role=checkbox tự làm.
+  it('tìm thấy cả 2 hàng tự làm (phương thức thanh toán, hoá đơn VAT)', () => {
+    expect(rows).toHaveLength(2);
   });
 
   it.each(rows.map((r, i) => [i, r.role, r.tag] as const))('hàng #%i (%s) gắn rowKeyboardProps', (_i, _role, tag) => {

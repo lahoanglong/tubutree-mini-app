@@ -81,7 +81,7 @@ export function FreeshipBoosterRail({ goal, lines, exclude, busySlug = null, onA
   if (shown !== true) return null;
   return (
     <Box px={3} pt={2}>
-      <FreeshipAddonRail title={goal.headline} stage={goal.stage} items={items} busySlug={busySlug} onAdd={onAdd} />
+      <FreeshipAddonRail title={goal.headline} stage={goal.stage} items={items} busySlug={busySlug} onAdd={onAdd} collapsible />
     </Box>
   );
 }

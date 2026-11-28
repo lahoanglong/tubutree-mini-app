@@ -3,7 +3,7 @@ import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useMutation, useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query';
-import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
+import { Trash2, Ticket, ChevronDown, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
@@ -83,7 +83,7 @@ import { Countdown } from '../components/ui/countdown';
 import { ConfirmSheet } from '../components/ui/confirm-sheet';
 import { CartComboBlock } from '../components/cart-combo-block';
 import { GiftNote, GiftTrialRow } from '../components/checkout/gift-rows';
-import { FreeShippingProgressBar } from '../components/ui/free-shipping-progress-bar';
+import { FreeShippingProgressBar, type FreeShippingProgressBarProps } from '../components/ui/free-shipping-progress-bar';
 import type { FreeshipAddonItem } from '../components/ui/freeship-addon-rail';
 import { FreeshipBoosterRail } from '../components/cart/freeship-booster/freeship-booster-rail';
 import { CartUnlockSlot } from '../components/cart/freeship-booster/cart-unlock-slot';
@@ -590,13 +590,20 @@ export default function CartPage() {
                 {greenBoxView ? (
                   <GreenBoxStrip view={greenBoxView} onMore={() => goSmart('/green-box')} />
                 ) : (
-                  <FreeShippingProgressBar
+                  <CartGoalBar
                     base={freeshipBase}
                     threshold={summary.freeshipThreshold}
                     serverReached={freeshipServerReached}
                     tubuOnly={hasMerchant}
                     giftThreshold={cartGiftThreshold(giftTrialShown)}
                     onShopMore={() => goSmart('/')}
+                    voucherOpts={{
+                      currentCode: summary.couponCode,
+                      subtotal: selectedSubtotal,
+                      productIds: cartProductIds(pricingLines),
+                      previewParams,
+                      previewKey: previewSelection?.key ?? '',
+                    }}
                   />
                 )}
               </CartUnlockSlot>
@@ -613,13 +620,16 @@ export default function CartPage() {
               onShownChange={setAovRailShown}
             />
           )}
-          <CartVoucherHintSection
-            currentCode={summary.couponCode}
-            subtotal={selectedSubtotal}
-            productIds={cartProductIds(pricingLines)}
-            previewParams={previewParams}
-            previewKey={previewSelection?.key ?? ''}
-          />
+          {/* Mã sắp mở khoá nằm trong thanh Miễn phí giao hàng; khi thanh đó nhường chỗ cho Hộp Xanh thì gợi ý mã đứng riêng. */}
+          {(!showFreeship || greenBoxView) && (
+            <CartVoucherHintSection
+              currentCode={summary.couponCode}
+              subtotal={selectedSubtotal}
+              productIds={cartProductIds(pricingLines)}
+              previewParams={previewParams}
+              previewKey={previewSelection?.key ?? ''}
+            />
+          )}
           {/* Chọn tất cả */}
           <Box px={3} pt={2}>
             <Checkbox checked={allSelected} onChange={toggleAll} label="Chọn tất cả" />
@@ -814,18 +824,28 @@ export default function CartPage() {
   );
 }
 
-/**
- * Nhắc mã sắp mở khoá dưới thanh Miễn phí giao hàng. Tách thành component riêng vì hook xem trước phải chạy sau các `return` sớm của trang (giỏ đang tải, lỗi),
- * như `CouponRow`. Cùng khoá truy vấn với dòng mã ở chân dính nên không thêm lượt gọi máy chủ. Mời áp mã đã đủ điều kiện không ở đây mà ở nút "Áp dụng"
- * của `CouponRow`: một hành động, một nút.
- */
-function CartVoucherHintSection(props: {
+type VoucherHintOpts = {
   currentCode: string | null | undefined;
   subtotal: number;
   productIds?: string[];
   previewParams?: { storefrontSlug?: string; itemIds?: string[] };
   previewKey: string;
-}) {
+};
+
+/**
+ * MỘT thanh mốc ở đầu giỏ (w47-01): thanh Miễn phí giao hàng/Quà dùng thử và nhắc mã sắp mở khoá gộp làm một (`cartGoalPick` chọn mốc gần nhất), một nút
+ * "Mua thêm". Tách component vì hook xem trước mã phải chạy sau các `return` sớm của trang; cùng khoá truy vấn với dòng mã ở chân dính nên không thêm lượt gọi.
+ */
+function CartGoalBar({ voucherOpts, ...bar }: Omit<FreeShippingProgressBarProps, 'voucher'> & { voucherOpts: VoucherHintOpts }) {
+  const v = useCartVoucherHint(voucherOpts);
+  return <FreeShippingProgressBar {...bar} voucher={v.hint?.unlock ?? null} />;
+}
+
+/**
+ * Nhắc mã sắp mở khoá khi giỏ không có thanh Miễn phí giao hàng (chỉ hàng gian hàng tự giao): vẫn là thanh duy nhất ở đầu giỏ. Mời áp mã đã đủ điều kiện
+ * không ở đây mà ở nút "Áp dụng" của `CouponRow`: một hành động, một nút.
+ */
+function CartVoucherHintSection(props: VoucherHintOpts) {
   const v = useCartVoucherHint(props);
   const goSmart = useSmartNavigate();
   if (!v.hint?.unlock) return null;
@@ -1263,7 +1283,10 @@ function GreenBoxEvents({ state, visible }: { state: GreenBoxState | null; visib
   return null;
 }
 
-/** Chân dính của giỏ: mã giảm giá, các dòng giảm, tổng tiền và nút Thanh toán. Thanh Miễn phí giao hàng nằm ở đầu giỏ (`FreeShippingProgressBar`), không ở đây. */
+/**
+ * Chân dính của giỏ: hàng mã giảm giá, khối tổng (chạm mở "chi tiết tính tiền": tạm tính, các dòng giảm, phí giao ước tính) và nút Thanh toán.
+ * Thanh mốc nằm ở đầu giỏ (`CartGoalBar`), không ở đây.
+ */
 function StickySummary({
   summary,
   selectedSubtotal,
@@ -1335,27 +1358,36 @@ function StickySummary({
     if (payable) void queryClient.prefetchQuery({ queryKey: ['addresses'], queryFn: getAddresses });
   }, [payable, queryClient]);
   const ship = cartShippingView(estimate, { goodsNet, freeshipReached, stale });
+  // Chân dính gọn (w47-01): hàng mã + hàng [Tổng · Tiết kiệm ▾ | Thanh toán]. Các dòng tính tiền (tạm tính, giảm, phí giao ước tính) gập trong
+  // "chi tiết tính tiền" ngay trên hàng mã; chạm khối tổng mở/gập. Lời báo (mã bị gỡ, hết hàng) vẫn hiện thẳng vì khách phải làm gì đó.
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const breakdownId = useId();
   const total = (
-    <>
+    <button
+      type="button"
+      data-testid="cart-total-toggle"
+      className="tubu-cart-total tubu-press"
+      aria-expanded={breakdownOpen}
+      aria-controls={breakdownId}
+      onClick={() => {
+        haptic('light');
+        setBreakdownOpen((o) => !o);
+      }}
+    >
       {/* Có phí giao ước tính: "Tổng tạm tính" = tiền hàng đã giảm + phí đó. Chưa có (đang hỏi, lỗi, có hàng gian hàng tự giao): số đã trừ giảm giá,
-          CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán là tiền hàng gộp chưa trừ gì — nên nhãn ghi "(đã giảm)" khi thật sự có giảm (P2-4). */}
-      <div style={{ fontSize: 'var(--type-label-size)', lineHeight: 'var(--type-label-lh)', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
-        {ship?.totalLabel ?? cartTotalLabel(comboDiscount + discount + tierDiscount)}
-      </div>
-      <div
-        data-testid="cart-total-value"
-        style={{ fontSize: 'var(--type-title-md-size)', lineHeight: 'var(--type-title-md-lh)', fontWeight: 700, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
-      >
-        {formatVnd(ship?.total ?? goodsNet)}
-      </div>
-      {saving > 0 && (
-        // Cùng màu deal và độ đậm với dòng "Tiết kiệm" của PDP (một màu cho mọi khoản giảm giá, DESIGN.md). Được xuống dòng tại khoảng trắng
-        // ("Tiết kiệm" / "12.345.000đ") khi khối tổng hẹp ở 320px; số tiền không có điểm ngắt nên không bao giờ bị cắt giữa số.
-        <Text variant="caption" as="div" data-testid="cart-saving" style={{ lineHeight: 18 / 13, color: 'var(--color-text-price-deal)', fontWeight: 600, display: 'block' }}>
-          {fillCopy('cart.saving', { x: formatVnd(saving) })}
-        </Text>
-      )}
-    </>
+          CHƯA gồm ship, nên nhãn ghi "(đã giảm)" khi thật sự có giảm (P2-4). Nhãn và số cùng dòng khi đủ chỗ, máy hẹp thì số xuống dưới nhãn. */}
+      <span className="tubu-cart-total-line">
+        <span className="tubu-cart-total-label">{ship?.totalLabel ?? cartTotalLabel(comboDiscount + discount + tierDiscount)}</span>
+        <span data-testid="cart-total-value" className="tubu-cart-total-value">
+          {formatVnd(ship?.total ?? goodsNet)}
+        </span>
+      </span>
+      {/* Cùng màu deal với dòng "Tiết kiệm" của PDP (một màu cho mọi khoản giảm giá, DESIGN.md); không có khoản tiết kiệm thì là lời mời xem chi tiết. */}
+      <span data-testid={saving > 0 ? 'cart-saving' : 'cart-breakdown-hint'} data-plain={saving > 0 ? undefined : 'true'} className="tubu-cart-total-saving">
+        {saving > 0 ? fillCopy('cart.saving', { x: formatVnd(saving) }) : fillCopy(breakdownOpen ? 'cart.breakdownHide' : 'cart.breakdownShow')}
+        <ChevronDown size={14} aria-hidden="true" className="tubu-cart-total-chevron" />
+      </span>
+    </button>
   );
 
   return (
@@ -1363,18 +1395,19 @@ function StickySummary({
       dense
       summary={
         <>
+          <div id={breakdownId} data-testid="cart-breakdown" hidden={!breakdownOpen} className="tubu-cart-breakdown">
+            <KeyValueRow label={vi.cart.subtotal} value={formatVnd(shownSubtotal)} style={COMPACT_ROW} />
+            {comboRowDiscount > 0 && (
+              <KeyValueRow label={vi.cart.comboDiscount} value={`-${formatVnd(comboRowDiscount)}`} tone="success" style={COMPACT_ROW} />
+            )}
+            {greenBoxDiscount > 0 && (
+              <KeyValueRow label={fillCopy('greenBox.name')} value={`-${formatVnd(greenBoxDiscount)}`} tone="success" style={COMPACT_ROW} dataDs="cart-green-box" />
+            )}
+            {discount > 0 && <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" style={COMPACT_ROW} />}
+            {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" style={COMPACT_ROW} />}
+            {ship && <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={COMPACT_ROW} dataDs="cart-ship-estimate" />}
+          </div>
           {coupon}
-          {comboRowDiscount > 0 && (
-            <KeyValueRow label={vi.cart.comboDiscount} value={`-${formatVnd(comboRowDiscount)}`} tone="success" style={COMPACT_ROW} />
-          )}
-          {greenBoxDiscount > 0 && (
-            <KeyValueRow label={fillCopy('greenBox.name')} value={`-${formatVnd(greenBoxDiscount)}`} tone="success" style={COMPACT_ROW} dataDs="cart-green-box" />
-          )}
-          {discount > 0 && (
-            <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" style={COMPACT_ROW} />
-          )}
-          {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" style={COMPACT_ROW} />}
-          {ship && <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={COMPACT_ROW} dataDs="cart-ship-estimate" />}
           {couponLine && (
             <div role="status" data-testid="coupon-notice">
               <Text as="div" variant="caption" tone="warning" style={{ lineHeight: 18 / 13 }}>

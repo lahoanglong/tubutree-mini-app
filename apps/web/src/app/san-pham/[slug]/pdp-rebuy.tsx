@@ -7,8 +7,6 @@ import { useQuickAdd } from '@/app/tai-khoan/yeu-thich/quick-add';
 import { useProductStock } from '@/components/pdp-stock';
 import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { ui } from '@/lib/guest-ui';
-import { phoneSecondary } from '@/lib/phone-ui';
 import { variationLabel } from '@/lib/variation-label';
 
 /** Danh sách món đã mua (`purchasedItemsQuery` thêm giới hạn ở cuối khoá): bị từ chối vì phân loại đã đổi thì tải lại đúng danh sách này. */
@@ -18,8 +16,8 @@ const PURCHASED_ITEMS_KEY = ['purchased-items'] as const;
  * Dòng "Bạn đã mua ngày dd/mm · Mua lại" (khách đã đăng nhập có đơn đã giao chứa sản phẩm này; `pdpRebuy` của app-core chọn lần mua gần nhất).
  * Một chạm thêm đúng phân loại lần trước, số lượng 1, qua đường giỏ nhanh dùng chung với dải "Mua lại món quen" (`useQuickAdd`: ghi giỏ vào cache,
  * thông báo nổi, khoá chạm đúp, tải lại danh sách khi máy chủ từ chối). Phân loại đó hết hàng hay không còn trên trang thì không có dòng.
- * Nút phụ, không phải nút chính: nút mua chính của trang vẫn là "Thêm vào giỏ".
- * Gói Refill của chai là khối riêng ngay sau dòng này (`PdpRefillOfferBlock`, cho mọi khách), không nằm trong dòng.
+ * Một dòng nhỏ với nút chữ (w47-01, cùng lớp `.tubu-rebuy` với Mini App): nút mua chính của trang vẫn là "Thêm vào giỏ". Gói Refill và Đặt định kỳ
+ * nằm ở dải chọn cách mua ngay sau dòng này (`PdpBuyModeStrip`).
  */
 export function PdpRebuyRow({
   productId,
@@ -49,8 +47,8 @@ export function PdpRebuyRow({
   const busy = quick.busyId === rebuy.variationId;
   return (
     <>
-      <div data-pdp-block="rebuy" className="mt-3 flex min-h-11 items-center justify-between gap-3">
-        <p className="min-w-0 text-sm text-[var(--color-text-secondary)] tabular-nums">{fillCopy('pdp.rebuyLine', { date: rebuy.dateLabel })}</p>
+      <div data-pdp-block="rebuy" className="tubu-rebuy">
+        <p className="tubu-rebuy-text">{fillCopy('pdp.rebuyLine', { date: rebuy.dateLabel })}</p>
         <button
           ref={button}
           type="button"
@@ -59,7 +57,7 @@ export function PdpRebuyRow({
           aria-busy={busy || undefined}
           aria-disabled={busy || undefined}
           onClick={() => void quick.addVariation(rebuy.variationId, { origin: button.current })}
-          className={`${ui.btnSecondary} ${phoneSecondary} flex-none`}
+          className="tubu-rebuy-cta tubu-press tubu-hit-44"
         >
           {fillCopy('pdp.rebuyCta')}
         </button>

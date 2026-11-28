@@ -33,6 +33,7 @@ export const FILES = {
   webPolicy: 'apps/miniapp/src/utils/web-policy.ts',
   about: 'apps/miniapp/src/pages/about.tsx',
   checkout: 'apps/miniapp/src/pages/checkout.tsx',
+  orderConsent: 'apps/miniapp/src/components/checkout/order-consent.tsx',
   webLegalPage: 'apps/web/src/app/chinh-sach/[loai]/page.tsx',
   appRoutes: 'apps/miniapp/src/components/app.tsx',
   navConfig: 'apps/miniapp/src/components/nav-config.ts',
@@ -787,6 +788,12 @@ export function checkSubmission(files) {
 
   const checkoutSrc = read(FILES.checkout);
   const consent = new Set(checkoutSrc ? policySlugCalls(parse(FILES.checkout, checkoutSrc)).map((c) => c.slug) : []);
+  // Câu đồng ý một dòng (`OrderConsent`): màn thanh toán dựng nó kèm `onOpenPolicy`, tấm của nó mở từng slug trong `ORDER_CONSENT_POLICIES`.
+  const consentSrc = read(FILES.orderConsent);
+  const checkoutCode = codeOnly(FILES.checkout, checkoutSrc);
+  if (checkoutCode && consentSrc && /<OrderConsent\b[^>]*\bonOpenPolicy=\{/.test(checkoutCode) && /\bonOpenPolicy\(slug\)/.test(codeOnly(FILES.orderConsent, consentSrc))) {
+    for (const slug of stringItems(findConst(parse(FILES.orderConsent, consentSrc), 'ORDER_CONSENT_POLICIES')) ?? []) consent.add(slug);
+  }
   const consentOk = consent.has('dieu-khoan') && consent.has('bao-mat');
   add(G2, 'legal.checkout-consent', consentOk, consentOk ? 'màn thanh toán có link Điều khoản và Chính sách bảo mật ở câu đồng ý' : 'màn thanh toán phải mở được cả "dieu-khoan" và "bao-mat"');
 

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -43,6 +45,9 @@ const mount = async () => {
   return r.container;
 };
 const bar = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="sticky-bar"]');
+/** Nút chính của thanh dính (Thanh toán / Bỏ món hết): khối tổng cũng là nút (mở chi tiết tính tiền, w47-01) nên bỏ nó ra. */
+const payButton = (c: HTMLElement) => bar(c)!.querySelector<HTMLButtonElement>('button:not([data-testid="cart-total-toggle"])')!;
+const miniCss = () => readFileSync(resolve(__dirname, '../../components/mini/mini.css'), 'utf8');
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -100,11 +105,13 @@ describe('/gio-hang — thanh dính đáy', () => {
     const c = await mount();
     const total = bar(c)!.querySelector<HTMLElement>('[data-testid="cart-total-value"]')!;
     expect(total.textContent).toBe('33.000đ');
+    const block = bar(c)!.querySelector<HTMLElement>('[data-testid="cart-total-toggle"]')!;
+    expect(block.contains(total)).toBe(true);
     expect(total.parentElement!.textContent).toContain('Tạm tính');
-    expect(total.parentElement!.querySelector('[data-testid="cart-saving"]')).not.toBeNull();
+    expect(block.querySelector('[data-testid="cart-saving"]')).not.toBeNull();
     const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;
-    expect(total.parentElement!.contains(link)).toBe(false);
-    expect(link.parentElement).toBe(total.parentElement!.parentElement);
+    expect(block.contains(link)).toBe(false);
+    expect(link.parentElement).toBe(block.parentElement!.parentElement);
   });
 
   // P2 #12: "Tiết kiệm" gồm cả giảm combo (đúng số dòng "Giảm giá combo") và dùng MỘT màu deal như PDP.
@@ -140,9 +147,12 @@ describe('/gio-hang — thanh dính đáy', () => {
       state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 })], { subtotal: 33000 });
       const c = await mount();
       for (const el of savings(c)) {
-        expect(el.className).toContain('text-[color:var(--color-text-price-deal)]');
+        // Thanh dính tô bằng lớp `.tubu-cart-total-saving` (chung với Mini App), khung tóm tắt bằng lớp Tailwind; cả hai cùng màu deal.
+        if (el.classList.contains('tubu-cart-total-saving')) expect(el.hasAttribute('data-plain')).toBe(false);
+        else expect(el.className).toContain('text-[color:var(--color-text-price-deal)]');
         expect(el.className).not.toContain('text-success-fg');
       }
+      expect(miniCss()).toMatch(/\.tubu-cart-total-saving \{[^}]*color: var\(--color-text-price-deal\);/);
     });
   });
 
@@ -151,16 +161,20 @@ describe('/gio-hang — thanh dính đáy', () => {
     state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 })], { subtotal: 33000 });
     const c = await mount();
     const total = bar(c)!.querySelector<HTMLElement>('[data-testid="cart-total-value"]')!;
-    const lead = total.parentElement!;
+    const lead = bar(c)!.querySelector<HTMLElement>('[data-testid="cart-total-toggle"]')!.parentElement!;
     const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;
     const row = lead.parentElement!;
     expect(row.className).toMatch(/\bflex-wrap\b/);
     expect(lead.className).toContain('flex-[1000_1_0%]');
     expect(lead.className).not.toMatch(/\bmin-w-0\b/);
     expect(lead.className).not.toMatch(/\bwhitespace-nowrap\b/);
-    expect(total.className).toMatch(/\bwhitespace-nowrap\b/);
-    expect(lead.firstElementChild!.className).toMatch(/\bwhitespace-nowrap\b/);
+    // Không ngắt số tiền và nhãn: lớp `.tubu-cart-total-value` / `.tubu-cart-total-label` (mini.css, chung với Mini App).
+    expect(total.className).toContain('tubu-cart-total-value');
+    expect(lead.querySelector('.tubu-cart-total-label')).not.toBeNull();
+    expect(miniCss()).toMatch(/\.tubu-cart-total-value \{[^}]*white-space: nowrap;/);
+    expect(miniCss()).toMatch(/\.tubu-cart-total-label \{[^}]*white-space: nowrap;/);
     const saving = lead.querySelector<HTMLElement>('[data-testid="cart-saving"]')!;
+    expect(miniCss()).not.toMatch(/\.tubu-cart-total-saving \{[^}]*white-space: nowrap;/);
     expect(saving.className).not.toMatch(/\bwhitespace-nowrap\b/);
     expect(link.className).toContain('flex-[1_0_9.25rem]');
     expect(link.className).not.toMatch(/\bshrink-0\b|\bmin-w-\[9\.25rem\]/);
@@ -193,7 +207,7 @@ describe('/gio-hang — thanh dính đáy', () => {
     const c = await mount();
     click(c.querySelector('input[aria-label="Chọn tất cả sản phẩm"]'));
     await flush(3);
-    const btn = bar(c)!.querySelector('button')!;
+    const btn = payButton(c);
     expect(btn.disabled).toBe(true);
     expect(btn.textContent).toBe('Thanh toán (0)');
     expect(bar(c)!.textContent).toContain('Chọn ít nhất một sản phẩm');
@@ -203,14 +217,14 @@ describe('/gio-hang — thanh dính đáy', () => {
     state.cart = cartOf([line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const c = await mount();
     expect(bar(c)!.querySelector('a[href="/thanh-toan"]')).toBeNull();
-    expect(bar(c)!.querySelector('button')!.disabled).toBe(true);
+    expect(payButton(c).disabled).toBe(true);
     expect(bar(c)!.textContent).toContain('hết hàng');
   });
 
   it('tubu-w26-01: dòng hết hàng cạnh dòng mua được: nút một chạm chiếm trọn một hàng dưới tổng, bấm được, mô tả bằng lời báo', async () => {
     state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const c = await mount();
-    const btn = bar(c)!.querySelector('button')!;
+    const btn = payButton(c);
     expect(btn.textContent).toBe('Bỏ món hết & thanh toán tiếp');
     expect(btn.disabled).toBe(false);
     expect(btn.className).toContain('flex-[1_0_100%]');
@@ -230,7 +244,7 @@ describe('/gio-hang — thanh dính đáy', () => {
     const hint = bar(c)!.querySelector<HTMLElement>('[role="status"]')!;
     expect(hint.textContent).toContain('hết hàng');
     expect(hint.closest('[aria-hidden="true"]')).toBeNull();
-    const btn = bar(c)!.querySelector('button')!;
+    const btn = payButton(c);
     expect(hint.id).not.toBe('');
     expect(btn.getAttribute('aria-describedby')).toBe(hint.id);
   });
@@ -242,7 +256,7 @@ describe('/gio-hang — thanh dính đáy', () => {
     const hint = bar(c)!.querySelector<HTMLElement>('[role="status"]')!;
     expect(hint.textContent).toContain('Chọn ít nhất một sản phẩm');
     expect(hint.closest('[aria-hidden="true"]')).toBeNull();
-    expect(bar(c)!.querySelector('button')!.getAttribute('aria-describedby')).toBe(hint.id);
+    expect(payButton(c).getAttribute('aria-describedby')).toBe(hint.id);
   });
 
   it('mỗi lúc chỉ một bản lời báo lộ ra: bản trong khung tóm tắt nằm trong khối hidden (chỉ từ lg), thanh dính lg:hidden', async () => {
@@ -332,5 +346,28 @@ describe('/gio-hang — phí giao ước tính dưới Tạm tính', () => {
     expect(state.shipBase).toBeNull();
     expect(bar(c)!.textContent).toContain('Tạm tính');
     expect(bar(c)!.textContent).not.toContain('Phí giao (ước tính)');
+  });
+});
+
+describe('/gio-hang — chân dính gọn, chi tiết tính tiền gập (w47-01, như Mini App)', () => {
+  it('chạm khối tổng mở/gập chi tiết tính tiền (tạm tính, các khoản giảm); chưa có khoản tiết kiệm thì là lời mời xem chi tiết', async () => {
+    state.cart = cartOf([line({})], { discount: 50000, couponCode: 'XANH50' });
+    const c = await mount();
+    const toggle = bar(c)!.querySelector<HTMLButtonElement>('[data-testid="cart-total-toggle"]')!;
+    const breakdown = bar(c)!.querySelector<HTMLElement>('[data-testid="cart-breakdown"]')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-controls')).toBe(breakdown.id);
+    expect(breakdown.hidden).toBe(true);
+    const hint = toggle.querySelector<HTMLElement>('[data-testid="cart-breakdown-hint"]')!;
+    expect(hint.dataset.plain).toBe('true');
+    const closed = hint.textContent;
+    click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(breakdown.hidden).toBe(false);
+    expect(breakdown.textContent).toContain('Tạm tính300.000đ');
+    expect(breakdown.textContent).toContain('Giảm giá-50.000đ');
+    expect(toggle.querySelector('[data-testid="cart-breakdown-hint"]')!.textContent).not.toBe(closed);
+    click(toggle);
+    expect(breakdown.hidden).toBe(true);
   });
 });

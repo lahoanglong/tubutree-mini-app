@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   PDP_BLOCK_ORDER,
-  ingredientsPreview,
   pdpAddOnSource,
   pdpRebuy,
   storyProductWithoutLead,
@@ -23,20 +22,6 @@ describe('pdpAddOnSource: một khối mua kèm', () => {
   });
   it('không nguồn nào có dữ liệu thì không khối nào', () => {
     expect(pdpAddOnSource({ bundles: false, fbt: false, bought: false })).toBeNull();
-  });
-});
-
-describe('ingredientsPreview', () => {
-  const list = ['a', 'b', 'c', 'd', 'e'];
-  it('mở sẵn 3 dòng, còn lại ẩn', () => {
-    expect(ingredientsPreview(list, false)).toEqual({ shown: ['a', 'b', 'c'], hidden: 2 });
-  });
-  it('bấm Xem đủ thì hiện hết', () => {
-    expect(ingredientsPreview(list, true)).toEqual({ shown: list, hidden: 0 });
-  });
-  it('từ 3 dòng trở xuống không có nút', () => {
-    expect(ingredientsPreview(['a', 'b', 'c'], false)).toEqual({ shown: ['a', 'b', 'c'], hidden: 0 });
-    expect(ingredientsPreview(null, false)).toEqual({ shown: [], hidden: 0 });
   });
 });
 
@@ -124,11 +109,14 @@ describe('pdpRebuy', () => {
 });
 
 describe('PDP_BLOCK_ORDER', () => {
-  it('Thành phần ngay sau lợi ích, Mua lại trước Đặt định kỳ, một khối mua kèm trước Đánh giá', () => {
+  it('Mua lại rồi một dải cách mua; Thành phần, Nguồn gốc, Mô tả liền nhau ngay sau Điểm nổi bật; một khối mua kèm trước Đánh giá', () => {
     const at = (k: (typeof PDP_BLOCK_ORDER)[number]) => PDP_BLOCK_ORDER.indexOf(k);
+    expect(at('modes')).toBe(at('rebuy') + 1);
     expect(at('ingredients')).toBe(at('benefits') + 1);
-    expect(at('rebuy')).toBeLessThan(at('subscribe'));
-    expect(at('refill')).toBe(at('rebuy') + 1);
+    expect(at('origin')).toBe(at('ingredients') + 1);
+    expect(at('description')).toBe(at('origin') + 1);
+    expect(PDP_BLOCK_ORDER).not.toContain('refill');
+    expect(PDP_BLOCK_ORDER).not.toContain('subscribe');
     expect(at('addons')).toBeLessThan(at('reviews'));
     expect(at('reviews')).toBeLessThan(at('compare'));
     expect(new Set(PDP_BLOCK_ORDER).size).toBe(PDP_BLOCK_ORDER.length);

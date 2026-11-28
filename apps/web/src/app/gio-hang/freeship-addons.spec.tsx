@@ -136,7 +136,9 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
     expect(pending.getAttribute('aria-hidden')).toBe('true');
     expect(q(c, 'cart-freeship')!.contains(pending)).toBe(true);
     expect(pending.compareDocumentPosition(c.querySelector('input[aria-label="Chọn tất cả sản phẩm"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(pending.textContent).toBe('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
+    // Khung chờ là đúng dòng gập 44px của dải (w47-01), cùng chữ: dải về không làm danh sách nhảy.
+    expect(pending.textContent).toBe('Gợi ý thêm để được Miễn phí giao hàng');
+    expect(pending.querySelector('.tubu-addon-toggle')).not.toBeNull();
     expect(pending.className).toBe(q(c, 'cart-freeship')!.querySelector('.tubu-addon')!.className);
     expect(q(c, 'freeship-addons')).toBeNull();
     await act(async () => open());

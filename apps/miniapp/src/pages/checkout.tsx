@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import type { CheckoutLastStep, CheckoutStep, QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { Page, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { Box } from '../components/ui/box';
@@ -26,6 +26,8 @@ import { PickupSection, WaivedShippingValue } from '../components/checkout/picku
 import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '../components/checkout/use-checkout-pickup';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { OrderZaloConsentRow, useOrderZaloConsent } from '../components/checkout/order-zalo';
+import { OrderConsent } from '../components/checkout/order-consent';
+import { PointsToggleRow, type PointsToggleNote } from '../components/checkout/points-toggle-row';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { TransferPreview, warmBankPayment } from '../components/checkout/transfer-preview';
 import { getBankQr } from '../services/payment-api';
@@ -104,7 +106,6 @@ type PlaceBody = Parameters<typeof placeOrder>[0];
 // Đang tính lại báo giá cho địa chỉ mới: giữ số cũ nhưng mờ đi, khoá Đặt hàng (placeLocked).
 const RECALC_DIM = { opacity: 0.5 } as const;
 // Dòng phụ dưới ô Điểm Xanh: cùng một khoảng cách để các ghi chú xếp đều như nhau.
-const POINTS_NOTE_STYLE = { lineHeight: 18 / 13, marginTop: 2 } as const;
 
 /** Bộ nhớ theo phiên cho lựa chọn giữ qua một lần sang giỏ (như checkout-selection): bị chặn thì null, quay lại chọn lại. */
 function tabStorage(): Storage | null {
@@ -142,7 +143,6 @@ export default function CheckoutPage() {
   const orderLinkReferral = sfCtx.referralEligible === false ? null : sfCtx.referralCode;
   // Mã giới thiệu CTV khách tự nhập ở màn này (đã được server xác nhận) — khác mã đến từ link (sfCtx).
   const [referralApplied, setReferralApplied] = useState<string | null>(null);
-  const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
   // Mốc thời gian lúc khách nhận giá mới: báo "Tổng mới" khi báo giá tải lại xong sau mốc này.
@@ -360,6 +360,15 @@ export default function CheckoutPage() {
     // Báo giá cũ (chưa áp điểm) còn trên màn trong lúc tính lại: chỉ đọc số đã dùng khi báo giá thật sự đã trừ điểm.
     applied: usePoints && (quote.data?.pointsUsed ?? 0) > 0,
   });
+  // Lưu ý của hàng Điểm Xanh, đọc trong tấm ⓘ (cùng thứ tự với web): trần của đơn, hàng đối tác, điểm quy đổi, điểm đang giữ, điểm từ đơn sàn.
+  const convertedText = points.convertedNote ? (partnerPoints.capNote || partnerPoints.partnerNote ? convertedPointsNote(points.converted) : points.convertedNote) : null;
+  const pointsNotes: PointsToggleNote[] = [
+    { key: 'cap', text: points.usable > 0 ? partnerPoints.capNote : null },
+    { key: 'partner', text: points.usable > 0 ? partnerPoints.partnerNote : null },
+    { key: 'converted', text: convertedText },
+    { key: 'lock', text: points.lockNote },
+    { key: 'marketplace', text: marketplaceLine },
+  ].filter((n): n is PointsToggleNote => typeof n.text === 'string' && n.text !== '');
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);
   }, [partnerPoints.disabled, usePoints]);
@@ -1203,67 +1212,27 @@ export default function CheckoutPage() {
         )}
       </Box>
 
-      {/* ── Điểm Xanh ── */}
+      {/* ── Điểm Xanh: một dòng có công tắc; lưu ý nằm trong tấm ⓘ ── */}
       {user && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Box
-            role="checkbox"
-            {...rowKeyboardProps()}
-            aria-checked={usePoints && pointsUsable}
-            aria-disabled={!pointsUsable}
-            className={pointsUsable ? 'tubu-press' : undefined}
-            onClick={() => {
+          <PointsToggleRow
+            usable={pointsUsable}
+            checked={usePoints && pointsUsable}
+            onToggle={() => {
               if (!pointsUsable) return;
-              haptic('light');
               bumpChoice();
               setUsePoints((v) => !v);
             }}
-            flex
-            alignItems="center"
-            justifyContent="space-between"
-            style={{ minHeight: 44 }}
-          >
-            <Box>
-              <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
-                {viCheckout.points}
-              </Text>
-              <Text variant="caption" tone="tertiary" as="div" className="tubu-nums" style={{ lineHeight: 18 / 13 }}>
-                {pointsUsable
-                  ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null, publicConfig.loyalty?.vndPerPointRedeem)
-                  : partnerPoints.disabled && points.usable > 0
-                    ? lockedPointsLabel(points.balance)
-                    : (points.label ?? fillCopy('checkout.pointsNone'))}
-              </Text>
-              {points.usable > 0 && partnerPoints.capNote && (
-                <Text variant="caption" tone="tertiary" as="div" style={POINTS_NOTE_STYLE}>
-                  {partnerPoints.capNote}
-                </Text>
-              )}
-              {points.usable > 0 && partnerPoints.partnerNote && (
-                <Text variant="caption" tone="tertiary" as="div" style={POINTS_NOTE_STYLE}>
-                  {partnerPoints.partnerNote}
-                </Text>
-              )}
-              {points.convertedNote && (
-                <Text variant="caption" tone="tertiary" as="div" style={POINTS_NOTE_STYLE}>
-                  {partnerPoints.capNote || partnerPoints.partnerNote ? convertedPointsNote(points.converted) : points.convertedNote}
-                </Text>
-              )}
-              {points.lockNote && (
-                <Text variant="caption" tone="tertiary" as="div" style={POINTS_NOTE_STYLE}>
-                  {points.lockNote}
-                </Text>
-              )}
-              {marketplaceLine && (
-                <Text variant="caption" tone="tertiary" as="div" data-points-marketplace style={POINTS_NOTE_STYLE}>
-                  {marketplaceLine}
-                </Text>
-              )}
-            </Box>
-            {/* Checkbox (Task 19) thị giác thuần tuý — cùng lý do như Radio ở trên: logic bật/tắt
-                dùng điểm vẫn nằm nguyên trong onClick của Box cha, onChange rỗng chỉ để thoả React. */}
-            <Checkbox checked={usePoints && pointsUsable} disabled={!pointsUsable} onChange={() => {}} />
-          </Box>
+            text={
+              pointsUsable
+                ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null, publicConfig.loyalty?.vndPerPointRedeem)
+                : partnerPoints.disabled && points.usable > 0
+                  ? lockedPointsLabel(points.balance)
+                  : (points.label ?? fillCopy('checkout.pointsNone'))
+            }
+            notes={pointsNotes}
+            rate={formatVnd(publicConfig.loyalty?.vndPerPointRedeem ?? 1)}
+          />
         </Box>
       )}
 
@@ -1361,30 +1330,11 @@ export default function CheckoutPage() {
       </Box>
 
       {/* ── Tóm tắt ── */}
-      <Box
-        p={4}
-        mt={2}
-        className="tubu-press"
-        // Lỗi báo giá có nút Thử lại nằm trong thẻ: lúc đó thẻ không là nút nữa (nút lồng nút) nhưng chạm vẫn mở như trước.
-        role={quote.isError ? undefined : 'button'}
-        {...(quote.isError ? null : rowKeyboardProps())}
-        onClick={() => {
-          haptic('light');
-          setSummarySheetOpen(true);
-        }}
-        style={{ background: 'var(--color-bg-surface)', cursor: 'pointer' }}
-      >
-        <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 10 }}>
-          <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
-            {viCheckout.summary}
-          </Text>
-          <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
-            <Text variant="caption" tone="brand" as="div" style={{ lineHeight: 18 / 13, fontWeight: 500 }}>
-              Chi tiết
-            </Text>
-            <ChevronRight size={16} color="var(--color-text-brand)" />
-          </Box>
-        </Box>
+      {/* Tóm tắt đủ từng dòng ngay trên trang: không còn nút "Chi tiết" mở tấm lặp lại đúng các dòng này (w47-01). */}
+      <Box p={4} mt={2} data-testid="checkout-summary" style={{ background: 'var(--color-bg-surface)' }}>
+        <Text variant="body-sm" as="h2" style={{ lineHeight: 18 / 14, fontWeight: 500, margin: '0 0 10px' }}>
+          {viCheckout.summary}
+        </Text>
 
         {quote.isLoading ? (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1514,17 +1464,7 @@ export default function CheckoutPage() {
 
       {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} recipient={zalo.recipient} />}
 
-      <Text variant="caption" tone="secondary" as="div" data-testid="order-consent" style={{ lineHeight: 18 / 13, display: 'block', padding: '12px 16px 0' }}>
-        Bằng việc đặt hàng, bạn đồng ý với:{' '}
-        <br />
-        <span className="tubu-consent-links">
-          <ConsentLink onPress={() => setPolicy('dieu-khoan')}>Điều khoản</ConsentLink>,{' '}
-          <ConsentLink label="Chính sách bảo mật" onPress={() => setPolicy('bao-mat')}>Bảo mật</ConsentLink>,{' '}
-          <ConsentLink label="Chính sách đổi trả" onPress={() => setPolicy('doi-tra')}>Đổi trả</ConsentLink>,{' '}
-          <ConsentLink label="Chính sách vận chuyển" onPress={() => setPolicy('van-chuyen')}>Vận chuyển</ConsentLink>,{' '}
-          <ConsentLink label="Chính sách thanh toán" onPress={() => setPolicy('thanh-toan')}>Thanh toán</ConsentLink>.
-        </span>
-      </Text>
+      <OrderConsent onOpenPolicy={setPolicy} />
 
       <PolicySheet slug={policy} onClose={() => setPolicy(null)} />
 
@@ -1643,68 +1583,6 @@ export default function CheckoutPage() {
         }}
       />
 
-      <BottomSheet
-        open={summarySheetOpen}
-        onClose={() => setSummarySheetOpen(false)}
-        title="Chi tiết tính tiền đơn hàng"
-        footer={
-          <Button fullWidth onPress={() => setSummarySheetOpen(false)}>
-            Đã hiểu
-          </Button>
-        }
-      >
-        <Box p={3} style={{ background: 'var(--color-bg-canvas)', borderRadius: 'var(--radius-card)' }}>
-          <KeyValueRow label="Tạm tính tiền hàng" value={formatVnd(quote.data?.subtotal ?? previewSubtotal)} />
-
-          {(quote.data?.discount ?? previewDiscount) > 0 && (
-            <KeyValueRow label="Mã giảm giá" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} tone="success" />
-          )}
-
-          {shownComboOnly > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} tone="success" />}
-          <GreenBoxRow amount={shownGreenBox} />
-
-          {(quote.data ? (quote.data.tierDiscount ?? 0) : previewTier) > 0 && (
-            <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote.data ? (quote.data.tierDiscount ?? 0) : previewTier)}`} tone="success" />
-          )}
-
-          {quote.data && quote.data.pointsDiscount > 0 && (
-            <KeyValueRow label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
-          )}
-
-          <KeyValueRow
-            label="Phí vận chuyển"
-            value={
-              quote.data
-                ? shipRow?.waived
-                  ? <WaivedShippingValue originalFee={shipRow.originalFee} note={shipRow.note ?? ''} />
-                  : quote.data.shippingFee === 0
-                  ? vi.common.freeShip
-                  : formatVnd(quote.data.shippingFee)
-                : addressId
-                  ? fillCopy('checkout.calculating')
-                  : noAddressShipText
-            }
-            tone={quote.data?.shippingFee === 0 ? 'success' : 'primary'}
-          />
-
-          <div style={{ height: 1, background: 'var(--color-border-subtle)', margin: '8px 0' }} />
-
-          <KeyValueRow
-            label="Tổng thanh toán"
-            value={checkoutTotalText({ total: quote.data?.total ?? null, hasAddress: !!addressId }, formatVnd)}
-            emphasis
-          />
-
-          {(quote.data?.pointsEarned ?? 0) > 0 && (
-            <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
-              <Sprout size={13} color="var(--color-text-success)" aria-hidden />
-              <Text variant="caption" tone="success" as="div" style={{ lineHeight: 18 / 13 }}>
-                {pointsEarnLabel(quote.data!.pointsEarned)}
-              </Text>
-            </Box>
-          )}
-        </Box>
-      </BottomSheet>
     </Page>
   );
 }
@@ -1743,24 +1621,6 @@ function CheckoutSkeleton() {
         <Skeleton height={40} />
       </Box>
     </Shell>
-  );
-}
-
-/**
- * Link chính sách ở dòng đồng ý; chữ ngắn ("Bảo mật") thì `label` mang tên đầy đủ cho trình đọc màn hình. Năm link nằm trong
- * `.tubu-consent-links` (mỗi dòng cao 44px) nên khi phải xuống dòng, vùng chạm 44px không chồng lên link dòng khác.
- */
-function ConsentLink({ onPress, label, children }: { onPress: () => void; label?: string; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      className="tubu-hit-44"
-      aria-label={label}
-      onClick={onPress}
-      style={{ border: 'none', background: 'none', padding: 0, font: 'inherit', color: 'var(--color-text-brand)', textDecoration: 'underline', cursor: 'pointer' }}
-    >
-      {children}
-    </button>
   );
 }
 

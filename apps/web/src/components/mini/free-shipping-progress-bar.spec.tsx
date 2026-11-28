@@ -237,3 +237,29 @@ describe('FreeShippingProgressBar (web): thanh hai mốc Miễn phí giao hàng 
     expect(css).toMatch(/\.tubu-freeship-meter \.tubu-freeship-track \{ margin-top: 0; \}/);
   });
 });
+
+describe('FreeShippingProgressBar (web): một thanh mốc gộp nhắc mã sắp mở khoá (w47-01, như Mini App)', () => {
+  const VOUCHER = { code: 'GIAM45', missing: 20_000, pct: 80, text: 'Mua thêm 20.000đ để mở khoá mã GIAM45', barAria: 'Đã đạt 80% đơn tối thiểu của mã GIAM45' };
+
+  it('mã gần hơn mốc Miễn phí giao hàng: thanh nói mã, đo theo mã, một nút "Mua thêm"', () => {
+    const onShopMore = vi.fn();
+    const { container } = mount(<FreeShippingProgressBar base={50_000} threshold={200_000} onShopMore={onShopMore} voucher={VOUCHER} />);
+    expect(root(container).dataset.goal).toBe('voucher');
+    expect(q(container, 'cart-voucher-unlock')!.textContent).toBe(VOUCHER.text);
+    expect(root(container).textContent).not.toContain('để được Miễn phí giao hàng');
+    const bar = q(container, 'cart-voucher-unlock-bar')!;
+    expect(bar.getAttribute('role')).toBe('progressbar');
+    expect(bar.getAttribute('aria-valuenow')).toBe('80');
+    expect(bar.getAttribute('aria-label')).toBe(VOUCHER.barAria);
+    expect(container.querySelectorAll('button')).toHaveLength(1);
+    click(q(container, 'freeship-shop-more-cta'));
+    expect(onShopMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('mốc Miễn phí giao hàng gần hơn (hoặc hoà): giữ thanh Miễn phí giao hàng, không nói mã', () => {
+    const { container } = mount(<FreeShippingProgressBar base={190_000} threshold={200_000} voucher={{ ...VOUCHER, missing: 10_000 }} />);
+    expect(root(container).dataset.goal).toBe('progress');
+    expect(root(container).textContent).toContain('Mua thêm 10.000đ để được Miễn phí giao hàng 🚚');
+    expect(q(container, 'cart-voucher-unlock')).toBeNull();
+  });
+});

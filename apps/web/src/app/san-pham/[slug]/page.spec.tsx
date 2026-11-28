@@ -84,6 +84,9 @@ const PRODUCT = {
   ratingAvg: 4.5, reviewCount: 8,
 };
 
+/** Chọn một nút của dải chọn cách mua (w47-01): chỉ chế độ đang chọn có dòng chi tiết (thẻ gói Refill, nút Đặt định kỳ). */
+const pickMode = (c: HTMLElement, mode: 'retail' | 'refill' | 'subscribe') => click(c.querySelector(`[data-testid="pdp-buy-modes"] button[data-mode="${mode}"]`));
+
 const REFILL_PAIR = {
   productId: 'p-refill', slug: 'refill-dau-goi-bo-ket-5l', name: 'Túi Refill dầu gội bồ kết 5L', thumbnail: null, variationId: 'v-refill',
   price: 1_500_000, compareAt: null, sizeLabel: '5L', inStock: true, tubu: true,
@@ -185,7 +188,7 @@ describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB
 });
 
 describe('/san-pham/[slug] — khối Nguồn gốc & cách dùng (w27-03)', () => {
-  const guideOf = (c: HTMLElement) => c.querySelector<HTMLDetailsElement>('details[data-testid="pdp-origin"]');
+  const guideOf = (c: HTMLElement) => c.querySelector<HTMLElement>('section[data-testid="pdp-origin"]');
 
   it('nhãn vỏ "Tubu Tree": nơi làm ra theo tên, câu chủ hàng viết trong mô tả; gập sẵn, chữ vẫn trong HTML; một lối bản đồ nằm trong dd', async () => {
     api.product = {
@@ -197,11 +200,14 @@ describe('/san-pham/[slug] — khối Nguồn gốc & cách dùng (w27-03)', () 
     const c = await mount();
     const guide = guideOf(c)!;
     expect(guide).not.toBeNull();
-    expect(guide.open).toBe(false);
     expect(guide.getAttribute('data-pdp-block')).toBe('origin');
-    const summary = guide.querySelector('summary')!;
-    expect(summary.textContent).toBe('Nguồn gốc & cách dùngThanh Hóa');
-    expect(summary.className).toContain('min-h-[var(--section-header-h)]');
+    // Dòng gập trong dải "Chi tiết sản phẩm" (PdpDetailRow, w47-01): gập sẵn, thân ẩn nhưng chữ vẫn trong HTML.
+    expect(guide.closest('[data-pdp-group="details"]')).not.toBeNull();
+    const toggle = guide.querySelector<HTMLButtonElement>('[data-testid="pdp-origin-toggle"]')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.textContent).toBe('Nguồn gốc & cách dùngThanh Hóa');
+    expect(toggle.className).toContain('tubu-pdp-detail-toggle');
+    expect(guide.querySelector<HTMLElement>(`#${CSS.escape(toggle.getAttribute('aria-controls')!)}`)!.hidden).toBe(true);
     const rowText = (key: string) => guide.querySelector(`[data-testid="pdp-origin-${key}"]`)?.textContent;
     expect(rowText('origin')).toBe('Đến từFuwa3e · Thanh HóaXem trên bản đồ');
     expect(rowText('usage')).toBe('Cách dùng1 nắp cho 4kg đồ.');
@@ -320,20 +326,32 @@ describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
     expect(c.querySelector('h1')!.className).toContain('max-md:text-lg');
   });
 
-  it('thứ tự như Mini App: giao hàng (khối shipping) → mô tả ngắn và chứng nhận cùng một dải lợi ích (benefits)', async () => {
+  it('thứ tự như Mini App: giao hàng (khối shipping) → MỘT khối Điểm nổi bật gộp mô tả ngắn và chứng nhận (benefits, tối đa 3 dòng)', async () => {
     api.product = PRODUCT_TUBU;
     const c = await mount();
     const q = (t: string) => c.querySelector(`[data-testid="${t}"]`)!;
     const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(before(q('pdp-fulfiller'), q('pdp-short-desc'))).toBe(true);
-    expect(before(q('pdp-short-desc'), q('pdp-certs'))).toBe(true);
     const benefits = c.querySelector('[data-pdp-block="benefits"]')!;
-    expect(benefits.contains(q('pdp-short-desc'))).toBe(true);
+    expect(benefits.getAttribute('data-testid')).toBe('pdp-highlights');
+    expect(benefits.className).toBe('tubu-highlights');
+    expect(before(q('pdp-fulfiller'), benefits)).toBe(true);
+    expect(Array.from(benefits.querySelectorAll('li')).map((li) => li.getAttribute('data-kind'))).toEqual(['benefit', 'certs']);
+    expect(benefits.querySelector('li[data-kind="benefit"]')!.textContent).toBe('Sạch dịu nhẹ');
     expect(benefits.contains(q('pdp-certs'))).toBe(true);
-    expect(benefits.className).toContain('max-md:bg-[var(--color-bg-surface)]');
-    expect(c.querySelector('[data-section="pdp-main"]')!.contains(q('pdp-short-desc'))).toBe(false);
+    expect(c.querySelector('[data-section="pdp-main"]')!.contains(benefits)).toBe(false);
     expect(q('pdp-fulfiller').className).toContain('max-md:font-semibold');
-    expect(q('pdp-certs').firstElementChild!.className).toContain('max-md:border-0');
+    expect(q('pdp-certs').firstElementChild!.className).toBe('tubu-highlights-cert');
+  });
+
+  it('mô tả ngắn 4 ý (Điểm nổi bật chỉ 3 dòng): đủ 4 ý ở đầu dòng "Mô tả chi tiết"; một ý thì không lặp', async () => {
+    const short = 'Sạch dầu mỡ. Không hại da tay. Hương sả chanh. Bọt mịn.';
+    api.product = { ...PRODUCT_TUBU, shortDesc: short, certifications: [] };
+    const c = await mount();
+    expect(c.querySelectorAll('[data-pdp-block="benefits"] li')).toHaveLength(3);
+    expect(c.querySelector('[data-testid="pdp-description-body"]')!.firstElementChild!.textContent).toBe(short);
+    api.product = PRODUCT_TUBU;
+    const c2 = await mount();
+    expect(c2.querySelector('[data-testid="pdp-description-body"]')!.textContent).not.toContain('Sạch dịu nhẹ');
   });
 
   it('có dòng Điểm Xanh dưới giá như Mini App (nói chung khi chưa biết mốc tích điểm)', async () => {
@@ -412,7 +430,7 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
   it('mô tả HTML của đối tác vẽ thành đoạn và danh sách thật, không lộ thẻ thành chữ', async () => {
     const c = await mount();
     const section = c.querySelector('[data-pdp-block="description"]')!;
-    expect(section.querySelector('h2')!.textContent).toBe('Mô tả sản phẩm');
+    expect(section.querySelector('[data-testid="pdp-description-toggle"]')!.textContent).toBe('Mô tả chi tiết');
     expect(section.textContent).toContain('Thành phần');
     expect(Array.from(section.querySelectorAll('ul li')).map((li) => li.textContent)).toEqual(['Bồ kết', 'Gừng']);
     expect(section.textContent).not.toMatch(/<\/?[a-z]+/i);
@@ -436,7 +454,7 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
     expect(c.textContent).toContain('Sạch dịu');
   });
 
-  it('dải câu chuyện: một bản duy nhất ở phần dưới, sau Thành phần và trước Mô tả; không nằm ở cột thông tin', async () => {
+  it('dải câu chuyện: một bản duy nhất ở phần dưới, ngay sau dải Chi tiết sản phẩm (như Mini App); không nằm ở cột thông tin', async () => {
     api.product = {
       ...PRODUCT,
       ingredients: [{ name: 'Bồ kết', percentage: '12%', benefit: 'Sạch dịu' }],
@@ -453,7 +471,8 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
     expect(c.querySelector('[data-testid="pdp-info"]')!.contains(story)).toBe(false);
     const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(after(c.querySelector('[data-pdp-block="ingredients"]')!, story)).toBe(true);
-    expect(after(story, c.querySelector('[data-pdp-block="description"]')!)).toBe(true);
+    expect(after(c.querySelector('[data-pdp-block="description"]')!, story)).toBe(true);
+    expect(c.querySelector('[data-pdp-group="details"]')!.contains(story)).toBe(false);
   });
 
   it('không có câu chuyện riêng đang bật: không có khối câu chuyện (kịch bản mẫu chỉ lặp Thành phần)', async () => {
@@ -735,11 +754,13 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     expect(c.textContent).toContain('Đã bán 1,3k+');
   });
 
-  it('hàng Tubu: có dòng freeship, dòng Đặt định kỳ và Mở nhóm mua chung', async () => {
+  it('hàng Tubu: có nút "Định kỳ" trong dải chọn cách mua (bấm thì có dòng Đặt định kỳ) và Mở nhóm mua chung', async () => {
     api.product = { ...PRODUCT, fulfilment: 'TUBU', fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } };
     const c = await mount();
     await flush();
     expect(buttons(c).some((t) => /Mở nhóm mua chung/.test(t ?? ''))).toBe(true);
+    expect(buttons(c).some((t) => /Đặt định kỳ/.test(t ?? ''))).toBe(false);
+    pickMode(c, 'subscribe');
     expect(buttons(c).some((t) => /Đặt định kỳ/.test(t ?? ''))).toBe(true);
   });
 
@@ -752,6 +773,7 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
       const c = await mount();
       await flush();
       expect(buttons(c).some((t) => /Mở nhóm mua chung|Đặt định kỳ/.test(t ?? ''))).toBe(false);
+      expect(c.querySelector('button[data-mode="subscribe"]')).toBeNull();
       if (over.fulfilment === 'MERCHANT') expect(c.querySelector('[data-testid="pdp-freeship"]')).toBeNull();
     }
   });
@@ -760,15 +782,17 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     api.product = { ...PRODUCT, ingredients: [{ name: 'Bồ kết', percentage: '30%' }] };
     const c = await mount();
     const h2 = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(h2).toEqual(expect.arrayContaining(['Thành phần', 'Mô tả sản phẩm']));
+    expect(h2).toContain('Chi tiết sản phẩm');
     expect(h2).not.toContain('Cam kết Tubu');
+    const details = c.querySelector('[data-pdp-group="details"]')!;
+    expect(Array.from(details.querySelectorAll('[aria-expanded]')).map((b) => b.querySelector('.tubu-pdp-detail-title')!.textContent)).toEqual(['Thành phần', 'Mô tả chi tiết']);
     const promises = c.querySelector('[data-pdp-block="promises"]')!;
     expect(promises.querySelector('[data-testid="product-trust-strip"]')).not.toBeNull();
-    // Lối chính sách vận chuyển có đúng một lần (dải đã trỏ vận chuyển khi chưa biết số ngày đổi trả thì không thêm lối riêng).
-    expect(promises.querySelectorAll('a[href="/chinh-sach/van-chuyen"]')).toHaveLength(1);
+    // Khối cam kết không thêm lối chính sách vận chuyển riêng (w47-01): lối đó ở dòng "Vận chuyển ›".
+    expect(promises.querySelectorAll('a[href="/chinh-sach/van-chuyen"]')).toHaveLength(0);
     api.product = PRODUCT;
     const c2 = await mount();
-    expect(Array.from(c2.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Thành phần');
+    expect(c2.querySelector('[data-pdp-block="ingredients"]')).toBeNull();
   });
 
   it('dải Khách thường mua cùng (ở khối mua kèm) và Cùng thương hiệu (cuối trang) lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
@@ -816,7 +840,7 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(c.innerHTML).not.toMatch(/overflow-y-auto/);
   });
 
-  it('từ lg phần dưới là lưới hai cột xếp dày: Thành phần | Mô tả, Đánh giá | So sánh; câu chuyện, mua kèm, cam kết và dải gợi ý chiếm cả hàng', async () => {
+  it('từ lg phần dưới là lưới hai cột xếp dày: Đánh giá | So sánh; dải Chi tiết sản phẩm, câu chuyện, mua kèm, cam kết và dải gợi ý chiếm cả hàng', async () => {
     api.product = { ...PRODUCT, ingredients: [{ name: 'Bồ kết', percentage: null, benefit: null }] };
     api.compare = COMPARE;
     api.related = [{ id: 'r1', slug: 'sp-1', brand: 'Xanh Việt', name: 'Gợi ý 1', thumbnail: null, basePrice: 90000, salePrice: null, isFeatured: false, inStock: true }];
@@ -827,8 +851,9 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(grid.className).toContain('lg:grid-flow-row-dense');
     const cell = (block: string) => c.querySelector(`[data-pdp-block="${block}"]`)!.closest('[data-testid="pdp-below-cols"] > *')!;
     const spans = (block: string) => cell(block).className.split(' ').includes('lg:col-span-2');
-    expect(spans('ingredients')).toBe(false);
-    expect(spans('description')).toBe(false);
+    // Thành phần và Mô tả là dòng gập trong cùng một dải Chi tiết sản phẩm (một ô cả hàng).
+    expect(cell('ingredients')).toBe(cell('description'));
+    expect(spans('ingredients')).toBe(true);
     expect(spans('reviews')).toBe(false);
     expect(spans('compare')).toBe(false);
     expect(spans('promises')).toBe(true);
@@ -888,12 +913,16 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(blocks).toEqual([...PDP_BLOCK_ORDER]);
   });
 
-  it('chai đã ghép gói Refill: ngay dưới thẻ Refill có link sang trang mọi gói Refill (chỉ hiện từ md, điện thoại giữ đúng thẻ như Mini App); chai chưa ghép thì không có', async () => {
+  it('chai đã ghép gói Refill: link sang trang mọi gói Refill có ngay khi dựng (chưa chọn chế độ, cho SEO), chỉ hiện từ md; chọn "Túi Refill" thì thẻ nằm trước link; chai chưa ghép thì không có', async () => {
     api.refillPairs = { p1: REFILL_PAIR };
     const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-refill"]')).toBeNull();
+    expect(c.querySelector('a[data-testid="pdp-refill-landing"]')?.getAttribute('href')).toBe('/tiet-kiem-refill');
+    pickMode(c, 'refill');
     const card = c.querySelector('[data-testid="pdp-refill"]');
     const a = c.querySelector<HTMLAnchorElement>('a[data-testid="pdp-refill-landing"]');
     expect(card).not.toBeNull();
+    expect(c.querySelectorAll('a[data-testid="pdp-refill-landing"]')).toHaveLength(1);
     expect(a?.getAttribute('href')).toBe('/tiet-kiem-refill');
     expect(a?.textContent).toBe('Tiết kiệm với Refill · Túi, can Refill rẻ hơn mua chai mới');
     expect(a!.className.split(/\s+/)).toEqual(expect.arrayContaining(['hidden', 'md:inline-flex', 'min-h-11']));
@@ -902,6 +931,7 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     mounted = [];
     api.refillPairs = {};
     const c2 = await mount();
+    expect(c2.querySelector('button[data-mode="refill"]')).toBeNull();
     expect(c2.querySelector('[data-testid="pdp-refill-landing"]')).toBeNull();
   });
 
@@ -929,14 +959,14 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(sold2[0]!.parentElement).not.toBe(c2.querySelector('[data-testid="pdp-rating"]')!.parentElement);
   });
 
-  it('khối mua đứng ngay sau thông tin chính, trước "Đặt định kỳ", Vận chuyển và chứng nhận (nút mua nằm trong 1280×800); cột thông tin không xếp lại bằng order', async () => {
+  it('khối mua đứng ngay sau thông tin chính, trước dải chọn cách mua, Vận chuyển và chứng nhận (nút mua nằm trong 1280×800); cột thông tin không xếp lại bằng order', async () => {
     api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
     const c = await mount();
     const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     const add = c.querySelector('[data-testid="add-to-cart"]')!;
     const certs = c.querySelector('[data-testid="pdp-certs"]')!;
-    const subscribe = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Đặt định kỳ'))!;
-    expect(subscribe).toBeDefined();
+    const subscribe = c.querySelector('[data-testid="pdp-buy-modes"]')!;
+    expect(subscribe).not.toBeNull();
     expect(after(c.querySelector('[data-pdp-block="main"]')!, add)).toBe(true);
     expect(after(add, subscribe)).toBe(true);
     expect(after(subscribe, c.querySelector('[data-pdp-block="shipping"]')!)).toBe(true);
@@ -948,21 +978,23 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(info.querySelector('[class*="tubu-pdp-order-"]')).toBeNull();
   });
 
-  it('"Đặt định kỳ" nêu đúng số % máy chủ cấu hình (0.12 → 12%)', async () => {
+  it('"Định kỳ" và "Đặt định kỳ" nêu đúng số % máy chủ cấu hình (0.12 → 12%)', async () => {
     api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
     const c = await mount();
+    expect(c.querySelector('button[data-mode="subscribe"]')!.getAttribute('aria-label')).toBe('Định kỳ, Tiết kiệm 12%');
+    pickMode(c, 'subscribe');
     const subscribe = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Đặt định kỳ'))!;
     expect(subscribe.textContent).toBe('Đặt định kỳ — tiết kiệm 12%');
   });
 
-  it('khách đã mua món này: dòng "Mua lại" nằm ngay trên "Đặt định kỳ" trong cùng dải', async () => {
+  it('khách đã mua món này: dòng "Mua lại" nằm ngay trên dải chọn cách mua, cùng một khung', async () => {
     api.auth = { status: 'authenticated', initialized: true, sessionUnavailable: false, user: { id: 'u1', fullName: 'Lan An' } };
     api.purchased = [PURCHASED];
     api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
     const c = await mount();
     await flush(6);
     const rebuy = c.querySelector('[data-pdp-block="rebuy"]')!;
-    const subscribe = c.querySelector('[data-pdp-block="subscribe"]')!;
+    const subscribe = c.querySelector('[data-pdp-block="modes"]')!;
     expect(rebuy.textContent).toContain('Bạn đã mua ngày 05/10');
     expect(rebuy.parentElement).toBe(subscribe.parentElement);
     expect(rebuy.compareDocumentPosition(subscribe) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -1074,7 +1106,7 @@ describe('/san-pham/[slug] — đường kẻ dưới hàng Ưu đãi (divider) 
 });
 
 describe('/san-pham/[slug] — dải cam kết (W45A) trong khối Cam kết cuối trang', () => {
-  it('hàng Tubu giao: dải ba trụ cột nằm trong khối promises (sau Đánh giá), kèm Mở nhóm mua chung; lối chính sách vận chuyển một lần', async () => {
+  it('hàng Tubu giao: dải ba trụ cột nằm trong khối promises (sau Đánh giá), kèm Mở nhóm mua chung; chính sách vận chuyển chỉ ở dòng "Vận chuyển ›"', async () => {
     api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
     api.config = { freeshipThreshold: 199000, subscribeDiscountPct: 0.12, returnWindowDays: 7 };
     const c = await mount();
@@ -1085,18 +1117,21 @@ describe('/san-pham/[slug] — dải cam kết (W45A) trong khối Cam kết cu�
     expect(c.querySelectorAll('[data-testid="product-trust-strip"]')).toHaveLength(1);
     expect(c.querySelector('[data-pdp-block="reviews"]')!.compareDocumentPosition(promises) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(Array.from(promises.querySelectorAll('button')).some((b) => /Mở nhóm mua chung/.test(b.textContent ?? ''))).toBe(true);
-    // Đổi trả có số ngày: dải trỏ chính sách đổi trả, khối thêm lối chính sách vận chuyển riêng (một lần).
-    expect(promises.querySelectorAll('a[href="/chinh-sach/van-chuyen"]')).toHaveLength(1);
+    // Đổi trả có số ngày: dải trỏ chính sách đổi trả; chính sách vận chuyển chỉ còn ở dòng "Vận chuyển ›" (w47-01), khối cam kết không lặp lại.
+    expect(promises.querySelectorAll('a[href="/chinh-sach/van-chuyen"]')).toHaveLength(0);
+    expect(Array.from(c.querySelectorAll('[role="button"]')).some((b) => b.textContent?.startsWith('Vận chuyển'))).toBe(true);
   });
 
   it.each([
     ['gian hàng tự giao', { kind: 'MERCHANT', name: 'Gốm Minh An', shippingFee: 30000, freeShipFrom: null }],
     ['gian hàng tạm nghỉ', { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null }],
-  ])('%s: không có dải cam kết của Tubu', async (_n, fulfiller) => {
+  ])('%s: không có dải cam kết của Tubu; khối cam kết giữ link chính sách vận chuyển (lối duy nhất)', async (_n, fulfiller) => {
     api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller };
     const c = await mount();
     expect(c.querySelector('[data-testid="product-trust-strip"]')).toBeNull();
-    expect(c.querySelector('[data-pdp-block="promises"]')).not.toBeNull();
+    const promises = c.querySelector('[data-pdp-block="promises"]')!;
+    expect(promises).not.toBeNull();
+    expect(promises.querySelectorAll('a[href="/chinh-sach/van-chuyen"]')).toHaveLength(1);
   });
 });
 
@@ -1236,6 +1271,7 @@ describe('/san-pham/[slug] — khối Hỏi nhanh · Cùng danh mục · Bản R
     api.product = BOTTLE;
     api.refillPairs = { p1: CHEAP_PACK };
     const c = await mount();
+    pickMode(c, 'refill');
     expect(c.querySelector('[data-testid="pdp-refill"]')!.textContent).toContain('tiết kiệm 500.000đ');
     expect(refillTexts(c)).toEqual({
       heading: 'Bản Refill tiết kiệm',
@@ -1249,6 +1285,7 @@ describe('/san-pham/[slug] — khối Hỏi nhanh · Cùng danh mục · Bản R
     api.refillPairs = { p1: CHEAP_PACK };
     api.flash = [{ itemId: 'f1', variationId: 'v1', productSlug: 'dau-goi-bo-ket', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, soldCount: 1, quota: 10, endAt: '2099-10-14T16:00:00.000Z' }];
     const c = await mount();
+    pickMode(c, 'refill');
     expect(c.querySelector('[data-testid="pdp-refill"]')!.textContent).not.toMatch(/tiết kiệm/);
     expect(refillTexts(c)).toEqual({ heading: 'Bản Refill', link: 'Túi Refill dầu gội bồ kết 5L', faq: 'Có: Túi Refill dầu gội bồ kết 5L.' });
   });
